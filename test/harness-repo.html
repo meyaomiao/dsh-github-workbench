@@ -1,0 +1,62 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>PENDING</title></head><body>
+<pre id="out">PENDING</pre>
+<script>
+localStorage.setItem('gw.token','test-token');
+localStorage.setItem('gw.repo','octocat/hello-world');
+localStorage.setItem('gw.recent', JSON.stringify(['alice/helpers','xzb/mine']));
+const NOW = new Date().toISOString();
+window.fetch = function(url){
+  const u = String(url);
+  let body = {};
+  if (u.includes('/user/repos')) body = [
+    { full_name:'xzb/mine', private:true, pushed_at:NOW, description:'mine', fork:false, archived:false, owner:{login:'xzb'} },
+    { full_name:'alice/helpers', private:false, pushed_at:NOW, description:'not mine', fork:false, archived:false, owner:{login:'alice'} },
+  ];
+  else if (u === 'https://api.github.com/user') body = { login:'xzb' };
+  else if (u.includes('/repos/octocat/hello-world')) body = { full_name:'octocat/hello-world', description:'', default_branch:'main', private:false, stargazers_count:1, html_url:'' };
+  else if (u.includes('/branches')) body = [];
+  else if (u.includes('/search')) body = { items: [] };
+  else body = {};
+  return Promise.resolve({ ok:true, status:200, json:function(){return Promise.resolve(body)}, headers:{get:function(){return null}} });
+};
+</script>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react@18.3.1/node_modules/react/umd/react.production.min.js"></script>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/umd/react-dom.production.min.js"></script>
+<script src="./_loader.js"></script>
+<script src="./lib-client.js"></script>
+<script>
+function report(ok, info){ document.title = 'RESULT ' + (ok?'PASS':'FAIL') + ' ' + info;
+  document.getElementById('out').textContent = document.title; }
+try {
+  const ctx = { effect(fn){ const d=fn(); return ()=>d&&d(); } };
+  window.__exports__.apply(ctx);
+  const timer = setInterval(() => {
+    const root = document.querySelector('.gw-root');
+    if (!root) return;
+    clearInterval(timer);
+    // 打开仓库切换弹层
+    const btn = root.querySelector('.gw-repo-btn');
+    btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+    btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    btn.click();
+    setTimeout(() => {
+      const pop = root.querySelector('.gw-pop');
+      if (!pop) { report(false,'popover did not open'); return; }
+      const xs = pop.querySelectorAll('.gw-x');
+      const items = pop.querySelectorAll('.gw-pop-item');
+      // 计算样式:取第一个 x 的 display(未悬停应为 none,规则存在性看 styleSheets)
+      let cssRuleOk = false;
+      for (const sheet of document.styleSheets) {
+        try { for (const r of sheet.cssRules) {
+          if (r.selectorText && r.selectorText.includes('.gw-pop-item:hover .gw-x')) cssRuleOk = true;
+        } } catch(e){}
+      }
+      const firstX = xs[0];
+      report(xs.length === 2 && cssRuleOk,
+        'items=' + items.length + ' xCount=' + xs.length +
+        ' cssRule=' + cssRuleOk +
+        (firstX ? ' xDisplay=' + getComputedStyle(firstX).display : ''));
+    }, 500);
+  }, 800);
+} catch(e){ report(false,'exception '+e.message); }
+</script></body></html>

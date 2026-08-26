@@ -1,0 +1,63 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>PENDING</title></head><body>
+<pre id="out">PENDING</pre>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react@18.3.1/node_modules/react/umd/react.production.min.js"></script>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/umd/react-dom.production.min.js"></script>
+<script src="./_loader.js"></script>
+<script src="./lib-client.js"></script>
+<script>
+const ctx = {
+  effect(fn) { const d = fn(); return () => d && d(); },
+  };
+function report(ok, info) {
+  document.title = 'RESULT ' + (ok ? 'PASS' : 'FAIL') + ' ' + info;
+  document.getElementById('out').textContent = document.title;
+}
+try {
+  window.__exports__.apply(ctx); // 无 betterSidebar → 3s 后降级独立面板
+  let done = false;
+  const timer = setInterval(() => {
+    if (done) { clearInterval(timer); return; }
+    const host = document.querySelector('[data-github-workbench-host]');
+    const styleOk = !!document.getElementById('github-workbench-styles');
+    const txt = host ? host.innerText || '' : '';
+    if (host && styleOk && txt.indexOf('选择仓库') >= 0) {
+      done = true; clearInterval(timer);
+      report(true, 'standalone mounted; styles injected; SetupCard rendered');
+    }
+  }, 150);
+  setTimeout(() => { if (!done) { done = true; clearInterval(timer);
+    const h = !!document.querySelector('[data-github-workbench-host]');
+    report(false, 'timeout; host=' + h + '; styles=' + !!document.getElementById('github-workbench-styles')); } }, 9000);
+} catch (e) { report(false, 'exception ' + e.message); }
+</script>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/umd/react-dom.production.min.js"></script>
+<script src="./_loader.js"></script>
+<script src="./lib-client.js"></script>
+<script>
+const ctx = {
+  effect(fn) { const d = fn(); return () => d && d(); },
+  };
+function report(ok, info) {
+  const msg = ok ? 'PASS' : 'FAIL';
+  document.title = 'RESULT ' + msg + ' ' + info;
+  document.getElementById('out').textContent = document.title;
+}
+try {
+  window.__exports__.apply(ctx);
+  const d = window.__tab__;
+  if (!d) { report(false, 'registerTab not called'); }
+  else {
+    const el = d.component({ scope: { sessionId: 's1', cwd: '/tmp' }, visible: true });
+    const info = JSON.stringify({
+      id: d.id, order: d.order, single: d.single,
+      toggles: Array.isArray(d.settings && d.settings.pluginToggles) ? d.settings.pluginToggles.length : -1,
+      iconFn: typeof d.icon === 'function',
+      comp: el && el.type && el.type.name,
+      sid: el && el.props && el.props.sessionId,
+    });
+    report(d.id === 'github-workbench:repo' && d.order === 55 && d.single === true &&
+           JSON.parse(info).toggles === 2 && JSON.parse(info).iconFn &&
+           JSON.parse(info).comp === 'WorkbenchApp' && JSON.parse(info).sid === 's1', info);
+  }
+} catch (e) { report(false, 'exception ' + e.message); }
+</script></body></html>

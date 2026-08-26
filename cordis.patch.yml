@@ -1,0 +1,8 @@
+# @dsh-abilities/github-workbench:在 dsh-better-sidebar 右侧面板注册「GitHub 工作台」tab。
+#
+# 纯客户端插件:数据直连 api.github.com(GitHub REST 对浏览器开放 CORS),
+# PAT 仅存浏览器 localStorage,不经过 DSH host、不落任何服务端日志。
+# 前置插件:dsh-better-sidebar(缺省时注册静默跳过,不影响其他功能)。
+- insert:
+    - id: github-workbench
+      name: '@dsh-abilities/github-workbench'

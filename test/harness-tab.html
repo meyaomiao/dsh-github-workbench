@@ -1,0 +1,35 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>PENDING</title></head><body>
+<pre id="out">PENDING</pre>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react@18.3.1/node_modules/react/umd/react.production.min.js"></script>
+<script src="file:///Users/xzb/.dsh/profiles/web/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/umd/react-dom.production.min.js"></script>
+<script src="./_loader.js"></script>
+<script src="./lib-client.js"></script>
+<script>
+const ctx = {
+  effect(fn) { const d = fn(); return () => d && d(); },
+  betterSidebar: { registerTab(d) { window.__tab__ = d; return function () {}; } },
+};
+function report(ok, info) {
+  const msg = ok ? 'PASS' : 'FAIL';
+  document.title = 'RESULT ' + msg + ' ' + info;
+  document.getElementById('out').textContent = document.title;
+}
+try {
+  window.__exports__.apply(ctx);
+  const d = window.__tab__;
+  if (!d) { report(false, 'registerTab not called'); }
+  else {
+    const el = d.component({ scope: { sessionId: 's1', cwd: '/tmp' }, visible: true });
+    const info = JSON.stringify({
+      id: d.id, order: d.order, single: d.single,
+      toggles: Array.isArray(d.settings && d.settings.pluginToggles) ? d.settings.pluginToggles.length : -1,
+      iconFn: typeof d.icon === 'function',
+      comp: el && el.type && el.type.name,
+      sid: el && el.props && el.props.sessionId,
+    });
+    report(d.id === 'github-workbench:repo' && d.order === 55 && d.single === true &&
+           JSON.parse(info).toggles === 2 && JSON.parse(info).iconFn &&
+           JSON.parse(info).comp === 'WorkbenchApp' && JSON.parse(info).sid === 's1', info);
+  }
+} catch (e) { report(false, 'exception ' + e.message); }
+</script></body></html>
