@@ -141,7 +141,9 @@ function NewPRDrawer(props: {
               onClick={() => {
                 setBusy(true); setError(null);
                 api.createPull(props.ghRef, { title: title.trim(), body, head: head.trim(), base })
-                  .then((pr) => { ui.toast(`PR #${pr.number} 已创建`); props.onCreated(pr.number); })
+                  .then((pr) => { ui.toast(`PR #${pr.number} 已创建`);
+                  (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`pulls:${pr.number}`);
+                  props.onCreated(pr.number); })
                   .catch((e) => setError(errText(e)))
                   .finally(() => setBusy(false));
               }}>{busy ? '创建中…' : '创建 PR'}</button>
@@ -215,6 +217,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
     }))) return;
     setBusy(true);
     try {
+      (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`pulls:${pull.number}`);
       await api.mergePull(props.ghRef, pull.number, method);
       ui.toast(`PR #${pull.number} 已合并(${METHOD_LABEL[method]})`);
       props.onChanged(); loadAll();

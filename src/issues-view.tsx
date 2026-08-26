@@ -116,7 +116,9 @@ function NewIssueDrawer(props: { ghRef: GhRef; onClose: () => void; onCreated: (
             onClick={() => {
               setBusy(true); setError(null);
               api.createIssue(props.ghRef, title.trim(), body)
-                .then((it) => { ui.toast(`Issue #${it.number} 已创建`); props.onCreated(it.number); })
+                .then((it) => { ui.toast(`Issue #${it.number} 已创建`);
+                  (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`issues:${it.number}`);
+                  props.onCreated(it.number); })
                 .catch((e) => { setError(errText(e)); })
                 .finally(() => setBusy(false));
             }}>{busy ? '创建中…' : '创建'}</button>

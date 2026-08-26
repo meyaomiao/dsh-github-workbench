@@ -240,6 +240,23 @@ export async function searchPublicRepos(q: string): Promise<GhSearchRepo[]> {
 /** 清空仓库列表缓存(token 变更后调用)。 */
 export function invalidateRepoCache(): void { repoCache = null; }
 
+// ---------- 活动哨兵(自动跟随仓库活动) ----------
+
+/** 自某时间点起更新的 Issues(含关闭/重开,过滤 PR)。 */
+export async function listIssuesSince(ref: GhRef, sinceIso: string): Promise<GhIssue[]> {
+  const arr = await gh<GhIssue[]>(`/repos/${ghRefKey(ref)}/issues${qs({
+    state: 'all', sort: 'updated', direction: 'desc', since: sinceIso, per_page: 20,
+  })}`);
+  return arr.filter((i) => !i.pull_request);
+}
+
+/** 自某时间点起更新的 PR(含合并/关闭)。 */
+export async function listPullsSince(ref: GhRef, sinceIso: string): Promise<GhPull[]> {
+  return gh<GhPull[]>(`/repos/${ghRefKey(ref)}/pulls${qs({
+    state: 'all', sort: 'updated', direction: 'desc', per_page: 20,
+  })}`).then((arr) => arr.filter((p2) => p2.updated_at >= sinceIso));
+}
+
 // ---------- 写(v0.1;破坏性动作由 UI 层二次确认后调用) ----------
 
 export async function createIssue(ref: GhRef, title: string, body: string): Promise<GhIssue> {

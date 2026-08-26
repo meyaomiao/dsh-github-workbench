@@ -82,6 +82,7 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
   const [repoPop, setRepoPop] = useState(false);
   const [setPop, setSetPop] = useState(false);
   const [deep, setDeep] = useState<{ tab: Subtab; number?: number } | null>(null);
+  const [autoFollow, setAutoFollowState] = useState(cfg.loadAutoFollow());
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [paneW, setPaneW] = useState(0);
   useEffect(() => {
@@ -153,6 +154,59 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
     return () => clearInterval(t);
   }, [visible]);
 
+  // ─── 活动哨兵:自动跟随当前仓库的新 Issue / PR / CI 活动 ───
+  const seenRef = useRef<Map<string, number>>(new Map());   // key -> 首见时间
+  const baselinedRef = useRef(false);
+  const lastSinceRef = useRef<string>(new Date(Date.now() - 15_000).toISOString());
+  const selfCoolRef = useRef<Set<string>>(new Set());       // 本 UI 自创条目的冷却
+  useEffect(() => {
+    if (!visible || !ref || !autoFollow) return;
+    let dead = false;
+    const tick = async () => {
+      if (dead) return;
+      try {
+        const [issues, pulls, runs] = await Promise.all([
+          api.listIssuesSince(ref!, lastSinceRef.current).catch(() => [] as api.GhIssue[]),
+          api.listPullsSince(ref!, lastSinceRef.current).catch(() => [] as api.GhPull[]),
+          api.listRuns(ref!).then((r) => r.filter((x) => x.created_at >= lastSinceRef.current)).catch(() => [] as api.GhRun[]),
+        ]);
+        type Ev = { key: string; tab: Subtab; number?: number; at: number; label: string };
+        const evs: Ev[] = [];
+        for (const i of issues) evs.push({ key: `i:${i.number}:${i.updated_at}`, tab: 'issues', number: i.number, at: Date.parse(i.updated_at), label: `Issue #${i.number}` });
+        for (const pr of pulls) evs.push({ key: `p:${pr.number}:${pr.updated_at}`, tab: 'pulls', number: pr.number, at: Date.parse(pr.updated_at), label: `PR #${pr.number}` });
+        for (const r of runs) if (r.status !== 'completed') evs.push({ key: `a:${r.id}:${r.run_attempt}`, tab: 'actions', at: Date.parse(r.created_at), label: `CI ${r.display_title || r.name || ''}` });
+        const fresh = evs
+          .filter((e) => !seenRef.current.has(e.key))
+          .filter((e) => !(window as unknown as { __gwSelfSet?: Set<string> }).__gwSelfSet?.has(`${e.tab === 'issues' ? 'issues' : e.tab}:${e.number ?? ''}`));
+        for (const e of evs) seenRef.current.set(e.key, Date.now());
+        if (!baselinedRef.current) { baselinedRef.current = true; return; }
+        fresh.sort((a, b) => b.at - a.at);
+        const top = fresh[0];
+        if (top) {
+          switchTab(top.tab);
+          setDeep(top.number != null ? { tab: top.tab, number: top.number } : { tab: top.tab });
+          ui.toast(`检测到新活动:${top.label}`, 'ok');
+        }
+      } catch { /* 静默重试 */ }
+      finally {
+        lastSinceRef.current = new Date().toISOString();
+      }
+    };
+    // 基线先行,再进入轮询
+    tick().then(() => {
+      if (dead) return;
+      const iv = setInterval(() => { void tick(); }, 10_000);
+      // 存 dead 清理钩子
+      (tick as unknown as { _iv?: ReturnType<typeof setInterval> })._iv = iv;
+      const stop = setInterval(() => { if (dead) clearInterval(iv); }, 1000);
+      (stop as unknown as { _stop?: unknown })._stop = undefined;
+      cleanupFns.current.push(() => clearInterval(iv));
+      cleanupFns.current.push(() => clearInterval(stop));
+    });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, ref?.owner, ref?.repo, autoFollow]);
+
   const effBranch = branch || meta?.defaultBranch || '';
 
   function applyRepo(fullName: string): void {
@@ -181,6 +235,12 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
   const [dialog, setDialog] = useState<null | { opts: ConfirmOptions; resolve: (v: boolean) => void }>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; kind: 'ok' | 'err' }[]>([]);
   const seq = useRef(0);
+  const cleanupFns = useRef<(() => void)[]>([]);
+  // 供视图层登记“本 UI 自己刚产生的活动”,哨兵跳过首次跟随
+  (window as unknown as { __gwSelfMark?: (key: string) => void }).__gwSelfMark = (key: string) => {
+    (window as unknown as { __gwSelfSet?: Set<string> }).__gwSelfSet?.add(key);
+    setTimeout(() => { (window as unknown as { __gwSelfSet?: Set<string> }).__gwSelfSet?.delete(key); }, 20_000);
+  };
 
   const ui = useMemo<UICapability>(() => ({
     confirm: (opts) => new Promise<boolean>((resolve) => setDialog({ opts, resolve })),
@@ -262,6 +322,7 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
         )}
         {setPop && (
           <SettingsPopover token={token} onSaveToken={(t) => { cfg.saveToken(t); api.invalidateRepoCache(); setToken(t); }}
+            autoFollow={autoFollow} onSaveAutoFollow={(v) => { cfg.saveAutoFollow(v); setAutoFollowState(v); }}
             fontSize={fontSize} onSaveFontSize={(v) => { cfg.saveFontSize(v); setFontSize(v); }}
             onClose={() => setSetPop(false)} />
         )}
@@ -520,12 +581,14 @@ function RepoPopover(props: {
 
 function SettingsPopover(props: {
   token: string; onSaveToken: (t: string) => void;
+  autoFollow: boolean; onSaveAutoFollow: (v: boolean) => void;
   fontSize: cfg.FontSizePref; onSaveFontSize: (v: cfg.FontSizePref) => void;
   onClose: () => void;
 }): ReactNode {
   const [tok, setTok] = useState(props.token);
   const [autoSec, setAutoSec] = useState(cfg.loadAutoRefreshSec());
   const [fontSel, setFontSel] = useState(props.fontSize);
+  const [follow, setFollow] = useState(props.autoFollow);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent): void => {
@@ -548,6 +611,12 @@ function SettingsPopover(props: {
             onChange={(e) => setAutoSec(Number(e.target.value) || 0)} />
         </div>
         <div className="gw-field">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+            自动跟随仓库活动(新 Issue/PR/CI 时自动打开对应页签)
+          </label>
+        </div>
+        <div className="gw-field">
           <label>正文字号(Issue / PR 列表与详情)</label>
           <select className="gw-input" value={fontSel} onChange={(e) => setFontSel(e.target.value as cfg.FontSizePref)}
             style={{ appearance: 'auto', paddingRight: 8 }}>
@@ -562,6 +631,7 @@ function SettingsPopover(props: {
             props.onSaveToken(tok.trim());
             cfg.saveAutoRefreshSec(autoSec);
             props.onSaveFontSize(fontSel);
+            props.onSaveAutoFollow(follow);
             props.onClose();
           }}>保存</button>
         </div>
