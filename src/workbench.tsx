@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { GwIcon } from './icons.ts';
 import * as api from './api.ts';
 import * as cfg from './config.ts';
-import { ghRefKey, parseRepoInput, timeAgo, type GhRef } from './lib.ts';
+import { ghRefKey, parseGithubUrl, parseRepoInput, timeAgo, type GhRef } from './lib.ts';
 import { ensureStyles } from './styles.ts';
 import { CodeView } from './code-view.tsx';
 import { IssuesView } from './issues-view.tsx';
@@ -58,9 +58,11 @@ export interface WorkbenchAppProps {
   sessionId: string;
   cwd?: string;
   visible: boolean;
+  /** tab.path:由聊天外链铸造实例时携带的 GitHub URL(深链入口)。 */
+  seedUrl?: string;
 }
 
-export function WorkbenchApp({ sessionId, visible }: WorkbenchAppProps): ReactNode {
+export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps): ReactNode {
   const [repoFull, setRepoFull] = useState(cfg.loadRepo());
   const ref = useMemo<GhRef | null>(() => parseRepoInput(repoFull), [repoFull]);
   const [branch, setBranch] = useState(cfg.loadBranch());
@@ -79,6 +81,7 @@ export function WorkbenchApp({ sessionId, visible }: WorkbenchAppProps): ReactNo
   const [counts, setCounts] = useState<Partial<Record<Subtab, number>>>({});
   const [repoPop, setRepoPop] = useState(false);
   const [setPop, setSetPop] = useState(false);
+  const [deep, setDeep] = useState<{ tab: Subtab; number?: number } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [paneW, setPaneW] = useState(0);
   useEffect(() => {
@@ -99,6 +102,19 @@ export function WorkbenchApp({ sessionId, visible }: WorkbenchAppProps): ReactNo
     });
     setToken(cfg.loadToken());
   }, []);
+
+  // 外链深链:tab.path 变化 → 切仓 + 切页签(+详情编号)
+  useEffect(() => {
+    if (!seedUrl) return;
+    const m = parseGithubUrl(seedUrl);
+    if (!m) return;
+    applyRepo(ghRefKey(m.ref));
+    if (m.kind === 'issues') { switchTab('issues'); setDeep({ tab: 'issues', number: m.number }); }
+    else if (m.kind === 'pulls') { switchTab('pulls'); setDeep({ tab: 'pulls', number: m.number }); }
+    else if (m.kind === 'actions') { switchTab('actions'); setDeep({ tab: 'actions' }); }
+    else { switchTab('code'); setDeep(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedUrl]);
 
   // 无仓库时自动识别工作区
   useEffect(() => {
@@ -193,6 +209,10 @@ export function WorkbenchApp({ sessionId, visible }: WorkbenchAppProps): ReactNo
         ))}
         {meta && !branches.some((b) => b.name === meta.defaultBranch) && <option value={meta.defaultBranch}>{meta.defaultBranch}</option>}
       </select>
+      <button className="gw-hbtn" title="在浏览器打开当前仓库"
+        onClick={() => window.open(meta?.htmlUrl || `https://github.com/${repoFull}`, '_blank', 'noopener')}>
+        <GwIcon name="external-link" size={14} />
+      </button>
       <button className="gw-hbtn" title="刷新" onClick={() => setReload((n) => n + 1)}>
         <GwIcon name="refresh" size={14} />
       </button>
@@ -218,7 +238,9 @@ export function WorkbenchApp({ sessionId, visible }: WorkbenchAppProps): ReactNo
       </div>
       <div className="gw-body">
         <ViewPort subtab={subtab} reloadKey={`${ghRefKey(ref)}@${effBranch}#${reload}`}
-          ghRef={ref} branch={effBranch} branches={branches} visible={visible} onCount={onCount} />
+          ghRef={ref} branch={effBranch} branches={branches} visible={visible} onCount={onCount}
+          initialDetail={deep && ((subtab === 'issues' && deep.tab === 'issues') || (subtab === 'pulls' && deep.tab === 'pulls')) ? deep.number ?? null : null}
+          onConsumeDeep={() => setDeep(null)} />
       </div>
       <div className="gw-footer">
         <span>api.github.com · REST v3</span>
@@ -267,6 +289,8 @@ interface ViewPortProps {
   branches: api.BranchLite[];
   visible: boolean;
   onCount: (id: Subtab) => (n: number) => void;
+  initialDetail: number | null;
+  onConsumeDeep: () => void;
 }
 
 function ViewPort(p: ViewPortProps): ReactNode {
@@ -274,9 +298,9 @@ function ViewPort(p: ViewPortProps): ReactNode {
     case 'code':
       return <CodeView key={`c:${p.reloadKey}`} ghRef={p.ghRef} branch={p.branch} />;
     case 'issues':
-      return <IssuesView key={`i:${p.reloadKey}`} ghRef={p.ghRef} visible={p.visible} onCount={p.onCount('issues')} />;
+      return <IssuesView key={`i:${p.reloadKey}`} ghRef={p.ghRef} visible={p.visible} onCount={p.onCount('issues')} initialDetail={p.initialDetail} onConsumeDeep={p.onConsumeDeep} />;
     case 'pulls':
-      return <PullsView key={`p:${p.reloadKey}`} ghRef={p.ghRef} branches={p.branches} visible={p.visible} onCount={p.onCount('pulls')} />;
+      return <PullsView key={`p:${p.reloadKey}`} ghRef={p.ghRef} branches={p.branches} visible={p.visible} onCount={p.onCount('pulls')} initialDetail={p.initialDetail} onConsumeDeep={p.onConsumeDeep} />;
     case 'actions':
       return <ActionsView key={`a:${p.reloadKey}`} ghRef={p.ghRef} visible={p.visible} onCount={p.onCount('actions')} />;
   }

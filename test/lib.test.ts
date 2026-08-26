@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+
+/** node:test 轻量 expect 适配(chai 风格子集)。 */
+function expect(actual: unknown) {
+  return {
+    toEqual(expected: unknown) { assert.deepEqual(actual, expected); },
+    toMatchObject(expected: Record<string, unknown>) {
+      for (const [k, v] of Object.entries(expected)) assert.deepEqual((actual as Record<string, unknown>)[k], v);
+    },
+    toBeNull() { assert.equal(actual, null); },
+  };
+}
 import {
-  buildTree, clamp, decodeBase64Utf8, labelTextColor,
+  buildTree, parseGithubUrl, clamp, decodeBase64Utf8, labelTextColor,
   parseGithubRemote, parseRepoInput, qs, timeAgo,
 } from '../src/lib.ts';
 
@@ -83,5 +94,20 @@ describe('杂项', () => {
     assert.equal(clamp(9, 0, 5), 5);
     assert.equal(clamp(-1, 0, 5), 0);
     assert.equal(clamp(3, 0, 5), 3);
+  });
+});
+
+describe('parseGithubUrl', () => {
+  it('仓库主页 → 仅坐标', () => {
+    expect(parseGithubUrl('https://github.com/xzb/atlas')).toEqual({ ref: { owner: 'xzb', repo: 'atlas' } });
+  });
+  it('issue / pull 深链带编号', () => {
+    expect(parseGithubUrl('https://github.com/xzb/atlas/issues/142'))
+      .toMatchObject({ ref: { owner: 'xzb', repo: 'atlas' }, kind: 'issues', number: 142 });
+    expect(parseGithubUrl('https://github.com/xzb/atlas/pull/7?diff=split'))
+      .toMatchObject({ kind: 'pulls', number: 7 });
+  });
+  it('非 github 域 → null', () => {
+    expect(parseGithubUrl('https://gitlab.com/a/b')).toBeNull();
   });
 });

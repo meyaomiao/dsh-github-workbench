@@ -125,9 +125,23 @@ function mountAsTab(ctx: ClientCtx, registry: SidebarRegistry): () => void {
     title: () => 'GitHub 工作台',
     icon: iconFor('octo'),
     order: 55,
-    single: true,
+    // 认领聊天中的 github.com 链接(需宿主「接管外链」开关开启):
+    // 每个链接铸造独立实例,URL 落在 tab.path,由 WorkbenchApp 解析深链
+    urlTarget: (url) => /(^|\.)github\.com$/.test(url.hostname),
+    createTab: (state) => ({
+      tab: {
+        id: `${TAB_ID}:link:${state.nextBrowser}`,
+        type: TAB_ID,
+        title: 'GitHub 工作台',
+      },
+      patch: { nextBrowser: (state.nextBrowser ?? 0) + 1 },
+    }),
     // 原生齿轮设置:token 兜底来源与自动刷新周期(值经 absorbHostToken 合并进组件)
     settings: {
+      toggles: [
+        { key: 'browserInterceptLinks', title: '接管聊天中的 GitHub 链接到工作台' },
+        { key: 'browserInterceptHttps', title: '接管 https:// 链接' },
+      ],
       pluginToggles: [
         { key: 'token', title: 'GitHub Token(PAT)', type: 'text' },
         { key: 'autoRefreshSec', title: '自动刷新周期(秒)', type: 'number', min: 0, max: 120 },
@@ -137,6 +151,7 @@ function mountAsTab(ctx: ClientCtx, registry: SidebarRegistry): () => void {
       sessionId: props.scope.sessionId,
       cwd: props.scope.cwd,
       visible: props.visible,
+      seedUrl: props.tab.path,
     }),
   };
   let disposer: (() => void) | undefined;

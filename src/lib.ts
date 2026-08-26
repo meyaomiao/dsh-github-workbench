@@ -107,6 +107,24 @@ export function collectDirPaths(nodes: readonly TreeNode[], out: string[] = []):
   return out;
 }
 
+/** 从任意 GitHub URL 提取坐标与深链目标(非 github 域返回 null)。 */
+export function parseGithubUrl(href: string): {
+  ref: GhRef; kind?: 'issues' | 'pulls' | 'actions'; number?: number;
+} | null {
+  try {
+    const u = new URL(href);
+    if (!/(^|\.)github\.com$/.test(u.hostname)) return null;
+    const seg = u.pathname.split('/').filter(Boolean);
+    if (seg.length < 2) return null;
+    const ref: GhRef = { owner: seg[0], repo: seg[1].replace(/\.git$/, '') };
+    const out: ReturnType<typeof parseGithubUrl> = { ref };
+    if (seg[2] === 'issues' && /^\d+$/.test(seg[3] ?? '')) { out.kind = 'issues'; out.number = Number(seg[3]); }
+    else if (seg[2] === 'pull' && /^\d+$/.test(seg[3] ?? '')) { out.kind = 'pulls'; out.number = Number(seg[3]); }
+    else if (seg[2] === 'actions') { out.kind = 'actions'; }
+    return out;
+  } catch { return null; }
+}
+
 // ---------- 格式化 ----------
 
 /** 中文相对时间(<1min → 刚刚;超一年 → 具体日期)。 */

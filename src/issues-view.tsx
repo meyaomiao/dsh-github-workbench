@@ -16,13 +16,17 @@ export interface ListViewProps {
   ghRef: GhRef;
   visible: boolean;
   onCount: (n: number) => void;
+  /** 外链深链:初始打开的 issue/PR 编号(消费一次)。 */
+  initialDetail?: number | null;
+  onConsumeDeep?: () => void;
 }
 
-export function IssuesView({ ghRef, onCount }: ListViewProps): ReactNode {
+export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: ListViewProps): ReactNode {
   const ui = useUI();
   const [list, setList] = useState<api.GhIssue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<number | null>(null);
+  const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
+  useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
 
   const reload = useCallback(() => {

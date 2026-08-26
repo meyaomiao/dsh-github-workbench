@@ -23,10 +23,19 @@ export interface SessionScopeLite {
   cwd?: string;
 }
 
+/** SidebarTab 的本地字段子集。 */
+export interface SidebarTabLite {
+  id: string;
+  type: string;
+  path?: string;
+  meta?: unknown;
+}
+
 /** TabComponentProps 的本地字段子集。 */
 export interface TabPropsLike {
   scope: SessionScopeLite;
   visible: boolean;
+  tab: SidebarTabLite;
 }
 
 /** TabDescriptor 的本地最小契约。 */
@@ -40,5 +49,10 @@ export interface TabDescriptorLike {
   available?: unknown;
   /** 声明式设置(pluginToggles/render),宿主侧形状,本地仅透传。 */
   settings?: unknown;
+  /** 外链认领(v0.13+):命中 github.com 链接时由宿主以本类型 openTab。 */
+  urlTarget?: (url: URL) => boolean;
+  /** 自定义铸造(每个链接独立实例,URL 落在 tab.path)。 */
+  createTab?: (state: { nextBrowser: number }) =>
+    { tab: SidebarTabLite; patch?: Record<string, unknown> } | null;
   component: (props: TabPropsLike) => ReactNode;
 }

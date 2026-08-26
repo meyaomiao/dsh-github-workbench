@@ -18,11 +18,12 @@ const METHOD_LABEL: Record<MergeMethod, string> = {
   merge: 'Merge', squash: 'Squash and merge', rebase: 'Rebase and merge',
 };
 
-export function PullsView({ ghRef, branches, visible, onCount }: ListViewProps & { branches: api.BranchLite[] }): ReactNode {
+export function PullsView({ ghRef, branches, visible, onCount, initialDetail, onConsumeDeep }: ListViewProps & { branches: api.BranchLite[] }): ReactNode {
   const ui = useUI();
   const [list, setList] = useState<api.GhPull[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<number | null>(null);
+  const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
+  useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
 
   const reload = useCallback(() => {
