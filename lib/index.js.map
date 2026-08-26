@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/index.ts"],
+  "sourcesContent": ["/**\n * github-workbench \u80FD\u529B\u63D2\u4EF6:\u5728 dsh-better-sidebar \u53F3\u4FA7\u9762\u677F\u63D0\u4F9B\u300CGitHub \u5DE5\u4F5C\u53F0\u300Dtab\u3002\n *\n * \u7EAF\u5BA2\u6237\u7AEF\u63D2\u4EF6\u2014\u2014\u5168\u90E8\u80FD\u529B\u5728 lib/client.js(\u6D4F\u89C8\u5668 bundle):\n * \u8FDC\u7AEF\u4ED3\u5E93\u76EE\u5F55\u6811(git trees API)+ Issues / Pull requests / Actions \u5B50\u9875\u7B7E\u3002\n * \u670D\u52A1\u7AEF\u5165\u53E3\u4EC5\u6EE1\u8DB3 cordis \u88C5\u8F7D\u534F\u8BAE,\u4E0D\u6CE8\u518C\u5DE5\u5177\u3001\u4E0D\u8D77\u670D\u52A1\u3002\n *\n * \u524D\u7F6E:dsh-better-sidebar \u63D0\u4F9B ctx.betterSidebar \u6CE8\u518C\u63A5\u53E3\u3002\n */\n\n/** Cordis \u63D2\u4EF6\u540D,loader \u8BCA\u65AD\u4F7F\u7528\u3002 */\nconst name = 'github-workbench';\n\n/** \u672C\u63D2\u4EF6\u4F9D\u8D56\u7684\u4E0A\u4E0B\u6587\u670D\u52A1:\u670D\u52A1\u7AEF\u65E0\u3002 */\nconst inject: string[] = [];\n\n/** Cordis \u63D2\u4EF6\u4F53:\u65E0\u670D\u52A1\u7AEF\u903B\u8F91(\u65E0\u53EF\u914D\u7F6E\u9879,\u6545\u4E0D\u5BFC\u51FA Config)\u3002 */\nexport function apply(): void {}\n\nexport { inject, name };\n"],
+  "mappings": ";AAWA,IAAM,OAAO;AAGb,IAAM,SAAmB,CAAC;AAGnB,SAAS,QAAc;AAAC;",
+  "names": []
+}
