@@ -6,6 +6,7 @@
 
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-4d6bfe)](https://github.com/topics/dsh-plugin)
 [![dsh-better-sidebar](https://img.shields.io/badge/生态-dsh--better--sidebar-4d6bfe)](https://github.com/topics/dsh-better-sidebar)
+[![npm](https://img.shields.io/npm/v/dsh-github-workbench)](https://www.npmjs.com/package/dsh-github-workbench)
 [![license](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-blue)
 
@@ -57,7 +58,11 @@
 ## 📦 安装
 
 ```bash
-# 方式一:从 GitHub 直接装(dsh CLI)
+# 方式〇:npm 安装(推荐)
+npm i -g dsh-github-workbench   # 或 pnpm add -g
+dsh plugin --profile web add dsh-github-workbench
+
+# 方式一:从 GitHub 直接装(dsh CLI,免 npm)
 dsh plugin --profile web add github:meyaomiao/dsh-github-workbench
 
 # 方式二:克隆后本地挂载
