@@ -25,41 +25,56 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
   const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
   useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
+  const [stateFilter, setStateFilter] = useState<'open' | 'closed'>('open');
 
-  const reload = useCallback(() => {
-    setList(null); setError(null);
-    api.listPulls(ghRef)
-      .then((arr) => { setList(arr); onCount(arr.length); })
+  const load = useCallback((silent: boolean) => {
+    if (!silent) setList(null);
+    setError(null);
+    api.listPulls(ghRef, stateFilter)
+      .then((arr) => { setList(arr); if (stateFilter === 'open') onCount(arr.length); })
       .catch((e) => setError(errText(e)));
-  }, [ghRef.owner, ghRef.repo, onCount]);
+  }, [ghRef.owner, ghRef.repo, onCount, stateFilter]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    setList(null); setDetail(null);
+    load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghRef.owner, ghRef.repo, stateFilter]);
 
-  // 自动刷新(visible 门控)
+  // 自动刷新(visible 门控,静默不闪)
   useEffect(() => {
     const sec = Number(localStorage.getItem('gw.autoSec') ?? 0);
     if (!visible || sec <= 0) return;
-    const t = setInterval(reload, sec * 1000);
+    const t = setInterval(() => load(true), sec * 1000);
     return () => clearInterval(t);
-  }, [visible, reload]);
+  }, [visible, load]);
 
   return (
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
-        <span className="gw-open-count">{list ? `${list.length} open` : '…'}</span>
-        <button className="gw-btn primary" onClick={() => setShowNew(true)}>
-          <GwIcon name="plus" size={12} />新建 PR
-        </button>
+        <span className="gw-open-count">{list ? `${list.length} ${stateFilter === 'open' ? 'open' : 'closed'}` : '…'}</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
+            onClick={() => setStateFilter('open')}>开放</button>
+          <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
+            onClick={() => setStateFilter('closed')}>已关闭</button>
+          <button className="gw-btn primary" onClick={() => setShowNew(true)}>
+            <GwIcon name="plus" size={12} />新建 PR
+          </button>
+        </span>
       </div>
       <div className="gw-list">
-        {error && <ErrorBox msg={error} onRetry={reload} />}
+        {error && <ErrorBox msg={error} onRetry={() => load(true)} />}
         {!error && !list && <Loading />}
         {list?.length === 0 && <Empty>没有打开的 Pull Request。</Empty>}
         {list?.map((pr) => (
           <button key={pr.number} className="gw-row" onClick={() => setDetail(pr.number)}>
             <span className="gw-stateic"
-              style={{ color: pr.draft ? 'var(--dsw-alias-label-tertiary)' : 'var(--dsw-alias-state-success-primary)' }}>
-              <GwIcon name="pr" />
+              style={{ color: pr.state === 'closed'
+                ? 'var(--dsw-alias-state-danger-primary)'
+                : pr.draft ? 'var(--dsw-alias-label-tertiary)'
+                : 'var(--dsw-alias-state-success-primary)' }}>
+              <GwIcon name={pr.state === 'closed' ? 'x-circle' : 'pr'} />
             </span>
             <span className="gw-rowmain">
               <span className="gw-rowtitle">
@@ -78,11 +93,11 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
       {showNew && (
         <NewPRDrawer ghRef={ghRef} branches={branches}
           onClose={() => setShowNew(false)}
-          onCreated={(n) => { setShowNew(false); reload(); setDetail(n); }} />
+          onCreated={(n) => { setShowNew(false); load(true); setDetail(n); }} />
       )}
       {detail !== null && (
         <PullDrawer key={detail} ghRef={ghRef} number={detail}
-          onClose={() => setDetail(null)} onChanged={reload} />
+          onClose={() => setDetail(null)} onChanged={() => load(true)} />
       )}
     </div>
   );

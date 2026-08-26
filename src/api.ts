@@ -157,8 +157,10 @@ export async function getFileContent(ref: GhRef, path: string, branch: string): 
   };
 }
 
-export async function listIssues(ref: GhRef): Promise<GhIssue[]> {
-  const arr = await gh<GhIssue[]>(`/repos/${ghRefKey(ref)}/issues${qs({ state: 'open', sort: 'updated', per_page: 30 })}`);
+export async function listIssues(ref: GhRef, state: 'open' | 'closed' | 'all' = 'open'): Promise<GhIssue[]> {
+  const arr = await gh<GhIssue[]>(`/repos/${ghRefKey(ref)}/issues${qs({
+    state, sort: 'updated', direction: 'desc', per_page: 30,
+  })}`);
   return arr.filter((i) => !i.pull_request);
 }
 
@@ -170,8 +172,10 @@ export async function listComments(ref: GhRef, n: number): Promise<GhComment[]> 
   return gh<GhComment[]>(`/repos/${ghRefKey(ref)}/issues/${n}/comments${qs({ per_page: 60 })}`);
 }
 
-export async function listPulls(ref: GhRef): Promise<GhPull[]> {
-  return gh<GhPull[]>(`/repos/${ghRefKey(ref)}/pulls${qs({ state: 'open', per_page: 30 })}`);
+export async function listPulls(ref: GhRef, state: 'open' | 'closed' | 'all' = 'open'): Promise<GhPull[]> {
+  return gh<GhPull[]>(`/repos/${ghRefKey(ref)}/pulls${qs({
+    state, sort: 'updated', direction: 'desc', per_page: 30,
+  })}`);
 }
 
 export async function getPull(ref: GhRef, n: number): Promise<GhPull> {

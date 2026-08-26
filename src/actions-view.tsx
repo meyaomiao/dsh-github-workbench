@@ -18,8 +18,8 @@ export function ActionsView({ ghRef, visible, onCount }: { ghRef: GhRef; visible
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // 相对时间重绘
 
-  const reload = useCallback(() => {
-    setError(null);
+  const reload = useCallback((silent = false) => {
+    if (!silent) setError(null);
     api.listRuns(ghRef)
       .then((arr) => { setRuns(arr); onCount(arr.length); })
       .catch((e) => setError(errText(e)));
@@ -39,7 +39,7 @@ export function ActionsView({ ghRef, visible, onCount }: { ghRef: GhRef; visible
     if (!visible) return;
     const sec = loadAutoRefreshSec();
     if (sec <= 0) return;
-    const t = setInterval(reload, sec * 1000);
+    const t = setInterval(() => reload(true), sec * 1000);
     return () => clearInterval(t);
   }, [visible, reload]);
 
@@ -47,7 +47,7 @@ export function ActionsView({ ghRef, visible, onCount }: { ghRef: GhRef; visible
     try {
       await api.rerunRun(ghRef, run.id);
       ui.toast(`已触发重跑:${run.display_title || run.name || '#' + run.id}`);
-      setTimeout(reload, 1200);
+      setTimeout(() => reload(false), 1200);
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
 
@@ -60,7 +60,7 @@ export function ActionsView({ ghRef, visible, onCount }: { ghRef: GhRef; visible
     try {
       await api.cancelRun(ghRef, run.id);
       ui.toast('已发送取消请求');
-      setTimeout(reload, 1000);
+      setTimeout(() => reload(false), 1000);
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
 
@@ -72,7 +72,7 @@ export function ActionsView({ ghRef, visible, onCount }: { ghRef: GhRef; visible
         <span className="gw-open-count">
           最近 20 次{active > 0 ? ` · ${active} 个进行中` : ''}
         </span>
-        <button className="gw-btn" onClick={reload}><GwIcon name="refresh" size={11} />刷新</button>
+        <button className="gw-btn" onClick={() => reload(false)}><GwIcon name="refresh" size={11} />刷新</button>
       </div>
       <div className="gw-list">
         {error && <ErrorBox msg={error} onRetry={reload} />}

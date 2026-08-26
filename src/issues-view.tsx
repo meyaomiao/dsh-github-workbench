@@ -28,32 +28,48 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
   const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
   useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
+  const [stateFilter, setStateFilter] = useState<'open' | 'closed'>('open');
 
-  const reload = useCallback(() => {
-    setList(null); setError(null);
-    api.listIssues(ghRef)
-      .then((arr) => { setList(arr); onCount(arr.length); })
+  // 列表加载:仓库/筛选变化 → 清空进加载态;手动刷新/写操作后 → 静默换新(不闪)
+  const load = useCallback((silent: boolean) => {
+    if (!silent) { setList(null); }
+    setError(null);
+    api.listIssues(ghRef, stateFilter)
+      .then((arr) => { setList(arr); if (stateFilter === 'open') onCount(arr.length); })
       .catch((e) => setError(errText(e)));
-  }, [ghRef.owner, ghRef.repo, onCount]);
+  }, [ghRef.owner, ghRef.repo, onCount, stateFilter]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    setList(null); setDetail(null);          // 仓/筛切换才清
+    load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghRef.owner, ghRef.repo, stateFilter]);
+
+  const reload = useCallback(() => load(true), [load]);
 
   return (
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
-        <span className="gw-open-count">{list ? `${list.length} open` : '…'}</span>
-        <button className="gw-btn primary" onClick={() => setShowNew(true)}>
-          <GwIcon name="plus" size={12} />新建 Issue
-        </button>
+        <span className="gw-open-count">{list ? `${list.length} ${stateFilter === 'open' ? 'open' : 'closed'}` : '…'}</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
+            onClick={() => setStateFilter('open')}>开放</button>
+          <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
+            onClick={() => setStateFilter('closed')}>已关闭</button>
+          <button className="gw-btn primary" onClick={() => setShowNew(true)}>
+            <GwIcon name="plus" size={12} />新建 Issue
+          </button>
+        </span>
       </div>
       <div className="gw-list">
-        {error && <ErrorBox msg={error} onRetry={reload} />}
+        {error && <ErrorBox msg={error} onRetry={() => reload()} />}
         {!error && !list && <Loading />}
         {list?.length === 0 && <Empty>没有打开的 Issue。<br />用上方按钮创建第一个。</Empty>}
         {list?.map((it) => (
           <button key={it.number} className="gw-row" onClick={() => setDetail(it.number)}>
-            <span className="gw-stateic" style={{ color: 'var(--dsw-alias-state-success-primary)' }}>
-              <GwIcon name="issue" />
+            <span className="gw-stateic"
+              style={{ color: it.state === 'closed' ? 'var(--dsw-alias-state-danger-primary)' : 'var(--dsw-alias-state-success-primary)' }}>
+              <GwIcon name={it.state === 'closed' ? 'x-circle' : 'issue'} />
             </span>
             <span className="gw-rowmain">
               <span className="gw-rowtitle">{it.title}</span>
