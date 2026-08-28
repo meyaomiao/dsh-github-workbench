@@ -64,8 +64,8 @@
 | 头部 | `GET /repos/{o}/{r}`、`GET /branches?per_page=50`、仓库切换弹层 `GET /user/repos`(同前,5min 缓存,下拉即列前 20)+ 公开仓库发现 `GET /search/repositories?q=<q> in:name&sort=stars&per_page=8`(输入 ≥3 字符 450ms 去抖触发) |
 | Code-目录树 | `GET /repos/{o}/{r}/git/trees/{branch}?recursive=1`(`truncated:true` 时提示并降级逐级 contents) |
 | Code-文件预览 | `GET /repos/{o}/{r}/contents/{path}?ref={branch}`(<900KB 文本;base64→UTF-8;二进制/超大给外链降级) |
-| Issues | `GET /issues?state=open&sort=updated&per_page=30`(过滤 `pull_request` 项)、`GET /issues/{n}` + `GET /issues/{n}/comments` |
-| Pull requests | `GET /pulls?state=open&per_page=30`、`GET /pulls/{n}`、`GET /commits/{sha}/check-runs` |
+| Issues | `GET /search/issues?q=repo:o/r+is:issue+is:open&sort=created&per_page=30`(跟 `Link` 分页 + 「加载更多」;角标用 `total_count`;排序 Newest=`created` / Recently updated=`updated`)、`GET /issues/{n}` + `GET /issues/{n}/comments`(评论同样跟 `Link`) |
+| Pull requests | `GET /search/issues?q=repo:o/r+is:pr+is:open|is:closed+is:unmerged|is:merged`(开放 / 已关闭未合并 / 已合并三分栏,跟 `Link` 分页)、`GET /pulls/{n}`、`GET /commits/{sha}/check-runs` |
 | Actions | `GET /actions/runs?per_page=20` |
 
 **写(v0.1 全部包含):**
@@ -174,7 +174,9 @@ packages/github-workbench/
 - **v0.1(本次)= 读 + 上表全部写操作**;不做:release 管理、code review 逐行评论、
   项目板/Pages/仓库设置类管理(后续版本按需加);
 - 已知限制:超大仓 recursive tree 可能 truncated(有降级);写操作依赖 token 权限,
-  无权时按钮置灰并在 tooltip 说明缺哪个权限;
+  无权时按钮置灰并在 tooltip 说明缺哪个权限;Issues/PR 列表走 Search API(跟网页一致、带真实总数与分页),
+  Search 单次查询最多返回 1000 条、已登录约 30 次/分钟,超额时点「加载更多」会提示稍候;
+  列表项不含 PR 的 head/base(点进详情走 `/pulls/{n}` 补全);
 - 验收:硬刷新后 `+` 菜单出现「GitHub 工作台」;四页签可切换;真实建一个 issue、发一条评论、
   squash 合并一个测试 PR、重跑一次 CI 全链路走通;深浅主题无违和;HMR 反复禁用/启用无
   "already registered" 报错。

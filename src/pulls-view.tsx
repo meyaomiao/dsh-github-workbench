@@ -3,11 +3,11 @@
  * (diffstat / check-runs 摘要 / 合并三法强确认 / 关闭重开 / 评论区)。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GwIcon } from './icons.ts';
 import * as api from './api.ts';
-import { ghRefKey, timeAgo, type GhRef } from './lib.ts';
+import { timeAgo, type GhRef } from './lib.ts';
 import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentsBlock, CommentComposer } from './comments.tsx';
@@ -17,6 +17,9 @@ type MergeMethod = 'merge' | 'squash' | 'rebase';
 const METHOD_LABEL: Record<MergeMethod, string> = {
   merge: 'Merge', squash: 'Squash and merge', rebase: 'Rebase and merge',
 };
+const FILTER_LABEL: Record<api.PullFilter, string> = {
+  open: 'open', closed: 'closed', merged: 'merged',
+};
 
 export function PullsView({ ghRef, branches, visible, onCount, initialDetail, onConsumeDeep }: ListViewProps & { branches: api.BranchLite[] }): ReactNode {
   const ui = useUI();
@@ -25,21 +28,35 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
   const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
   useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
-  const [stateFilter, setStateFilter] = useState<'open' | 'closed'>('open');
+  const [stateFilter, setStateFilter] = useState<api.PullFilter>('open');
+  const [sort, setSort] = useState<api.ListSort>('created');
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const reqId = useRef(0);
 
-  const load = useCallback((silent: boolean) => {
-    if (!silent) setList(null);
+  const load = useCallback((silent: boolean, pageUrl?: string) => {
+    const id = pageUrl ? reqId.current : ++reqId.current;
+    if (pageUrl) setLoadingMore(true);
+    else if (!silent) setList(null);
     setError(null);
-    api.listPulls(ghRef, stateFilter)
-      .then((arr) => { setList(arr); if (stateFilter === 'open') onCount(arr.length); })
-      .catch((e) => setError(errText(e)));
-  }, [ghRef.owner, ghRef.repo, onCount, stateFilter]);
+    api.listPulls(ghRef, stateFilter, sort, pageUrl)
+      .then((page) => {
+        if (id !== reqId.current) return;
+        setList((prev) => (pageUrl && prev ? [...prev, ...page.items] : page.items));
+        setNextUrl(page.nextUrl);
+        setTotal(page.totalCount);
+        if (stateFilter === 'open' && page.totalCount != null) onCount(page.totalCount);
+      })
+      .catch((e) => { if (id === reqId.current) setError(errText(e)); })
+      .finally(() => { if (id === reqId.current) setLoadingMore(false); });
+  }, [ghRef.owner, ghRef.repo, onCount, stateFilter, sort]);
 
   useEffect(() => {
-    setList(null); setDetail(null);
+    setList(null); setDetail(null); setNextUrl(null);
     load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ghRef.owner, ghRef.repo, stateFilter]);
+  }, [ghRef.owner, ghRef.repo, stateFilter, sort]);
 
   // 自动刷新(visible 门控,静默不闪)
   useEffect(() => {
@@ -52,12 +69,21 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
   return (
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
-        <span className="gw-open-count">{list ? `${list.length} ${stateFilter === 'open' ? 'open' : 'closed'}` : '…'}</span>
-        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span className="gw-open-count">{list
+          ? `${list.length}${total != null ? ` / ${total}` : ''} ${FILTER_LABEL[stateFilter]}`
+          : '…'}</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <select className="gw-select" style={{ marginLeft: 0, maxWidth: 118 }}
+            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)} title="排序">
+            <option value="created">最新创建</option>
+            <option value="updated">最近更新</option>
+          </select>
           <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
             onClick={() => setStateFilter('open')}>开放</button>
           <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
             onClick={() => setStateFilter('closed')}>已关闭</button>
+          <button className={`gw-btn ${stateFilter === 'merged' ? 'primary' : ''}`}
+            onClick={() => setStateFilter('merged')}>已合并</button>
           <button className="gw-btn primary" onClick={() => setShowNew(true)}>
             <GwIcon name="plus" size={12} />新建 PR
           </button>
@@ -66,28 +92,45 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
       <div className="gw-list">
         {error && <ErrorBox msg={error} onRetry={() => load(true)} />}
         {!error && !list && <Loading />}
-        {list?.length === 0 && <Empty>没有打开的 Pull Request。</Empty>}
+        {list?.length === 0 && <Empty>{stateFilter === 'open'
+          ? '没有打开的 Pull Request。'
+          : stateFilter === 'merged' ? '没有已合并的 Pull Request。' : '没有已关闭(未合并)的 Pull Request。'}</Empty>}
         {list?.map((pr) => (
           <button key={pr.number} className="gw-row" onClick={() => setDetail(pr.number)}>
             <span className="gw-stateic"
-              style={{ color: pr.state === 'closed'
+              style={{ color: stateFilter === 'merged' || (pr.merged_at && pr.state === 'closed')
+                ? 'var(--dsw-alias-state-merged, #a371f7)'
+                : pr.state === 'closed'
                 ? 'var(--dsw-alias-state-danger-primary)'
                 : pr.draft ? 'var(--dsw-alias-label-tertiary)'
                 : 'var(--dsw-alias-state-success-primary)' }}>
-              <GwIcon name={pr.state === 'closed' ? 'x-circle' : 'pr'} />
+              <GwIcon name={stateFilter === 'merged' || pr.merged_at ? 'merge' : pr.state === 'closed' ? 'x-circle' : 'pr'} />
             </span>
             <span className="gw-rowmain">
               <span className="gw-rowtitle">
                 {pr.title}{pr.draft && <span className="gw-chip" style={{ marginLeft: 6 }}>draft</span>}
               </span>
               <span className="gw-rowsub">
-                #{pr.number} · <span className="gw-branch-chip">{pr.head.ref} → {pr.base.ref}</span>
+                #{pr.number}
+                {pr.head.ref && <> · <span className="gw-branch-chip">{pr.head.ref} → {pr.base.ref}</span></>}
                  · {timeAgo(pr.updated_at)}
               </span>
             </span>
             <span className="gw-meta">更新<br />{timeAgo(pr.updated_at)}</span>
           </button>
         ))}
+        {nextUrl && (
+          <div className="gw-more">
+            <button className="gw-btn" disabled={loadingMore} onClick={() => load(true, nextUrl)}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          </div>
+        )}
+        {!nextUrl && total != null && (list?.length ?? 0) >= 1000 && total > 1000 && (
+          <div className="gw-muted" style={{ textAlign: 'center', padding: '8px 12px 14px' }}>
+            Search 最多展示 1000 条，其余请上 GitHub 网页
+          </div>
+        )}
       </div>
 
       {showNew && (
@@ -175,6 +218,8 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
   const ui = useUI();
   const [pull, setPull] = useState<api.GhPull | null>(null);
   const [comments, setComments] = useState<api.GhComment[]>([]);
+  const [commentsNext, setCommentsNext] = useState<string | null>(null);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [checks, setChecks] = useState<api.GhCheckRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [method, setMethod] = useState<MergeMethod>('squash');
@@ -186,7 +231,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
       api.getPull(props.ghRef, props.number),
       api.listComments(props.ghRef, props.number),
     ])
-      .then(([p, c]) => { setPull(p); setComments(c); })
+      .then(([p, c]) => { setPull(p); setComments(c.items); setCommentsNext(c.nextUrl); })
       .catch((e) => setError(errText(e)));
   }, [props.ghRef.owner, props.ghRef.repo, props.number]);
 
@@ -217,7 +262,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
   if (!pull) return <Loading />;
 
   const closed = pull.state === 'closed';
-  const merged = pull.mergeable_state === undefined ? false : false; // merged 状态经 list 不含;以 checks/detail 为准的保守展示
+  const merged = Boolean(pull.merged_at);
   const okChecks = checks?.filter((c) => c.conclusion === 'success').length ?? 0;
   const badChecks = checks?.filter((c) => c.conclusion && c.conclusion !== 'success' && c.conclusion !== 'skipped' && c.conclusion !== 'neutral').length ?? 0;
   const pendingChecks = checks?.filter((c) => !c.conclusion).length ?? 0;
@@ -322,7 +367,19 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
 
         <div className="gw-detail-body">
           {pull.body || '(无描述)'}
-          <CommentsBlock ghRef={props.ghRef} number={props.number} comments={comments} onChanged={loadAll} />
+          <CommentsBlock ghRef={props.ghRef} number={props.number} comments={comments} onChanged={loadAll}
+            nextUrl={commentsNext} loadingMore={loadingMoreComments}
+            onLoadMore={() => {
+              if (!commentsNext) return;
+              setLoadingMoreComments(true);
+              api.listComments(props.ghRef, props.number, commentsNext)
+                .then((page) => {
+                  setComments((prev) => [...prev, ...page.items]);
+                  setCommentsNext(page.nextUrl);
+                })
+                .catch((e) => ui.toast(errText(e), 'err'))
+                .finally(() => setLoadingMoreComments(false));
+            }} />
         </div>
 
         <div className="gw-composer">

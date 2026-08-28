@@ -14,6 +14,9 @@ export function CommentsBlock(props: {
   ghRef: GhRef; number: number;
   comments: api.GhComment[];
   onChanged: () => void;
+  nextUrl?: string | null;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }): ReactNode {
   const ui = useUI();
   const [viewer, setViewer] = useState<string | null>(null);
@@ -33,18 +36,25 @@ export function CommentsBlock(props: {
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
 
-  if (props.comments.length === 0) return null;
+  if (props.comments.length === 0 && !props.nextUrl) return null;
 
   return (
     <div>
       <div className="gw-pop-divider" style={{ margin: '14px 0 4px' }} />
       <div className="gw-muted" style={{ fontSize: 11, marginBottom: 2 }}>
-        —— 评论 {props.comments.length} ——
+        —— 评论 {props.comments.length}{props.nextUrl ? '+' : ''} ——
       </div>
       {props.comments.map((c) => (
         <CommentRow key={c.id} comment={c} mine={viewer != null && c.user?.login === viewer}
           ghRef={props.ghRef} onChanged={props.onChanged} onDelete={() => del(c)} />
       ))}
+      {props.nextUrl && props.onLoadMore && (
+        <div className="gw-more">
+          <button className="gw-btn" disabled={props.loadingMore} onClick={props.onLoadMore}>
+            {props.loadingMore ? '加载中…' : '加载更多评论'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

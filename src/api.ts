@@ -3,7 +3,7 @@
  * Bearer PAT 鉴权、限流/错误归一为中文可操作提示,全部端点类型化。
  */
 
-import { qs, decodeBase64Utf8, type GhRef, ghRefKey } from './lib.ts';
+import { qs, decodeBase64Utf8, parseLinkNext, type GhRef, ghRefKey } from './lib.ts';
 
 const API = 'https://api.github.com';
 const TOKEN_KEY = 'gw.token';
@@ -40,7 +40,13 @@ interface GhOpts {
   accept?: string;
 }
 
-async function gh<T>(path: string, opts: GhOpts = {}): Promise<T> {
+interface GhResponse {
+  status: number;
+  json: unknown;
+  link: string | null;
+}
+
+async function ghRequest(path: string, opts: GhOpts = {}): Promise<GhResponse> {
   const headers: Record<string, string> = {
     accept: opts.accept ?? 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
@@ -55,23 +61,42 @@ async function gh<T>(path: string, opts: GhOpts = {}): Promise<T> {
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const remain = res.headers.get('x-ratelimit-remaining');
-  if (remain != null) lastRemaining = Number(remain);
+  const resource = res.headers.get('x-ratelimit-resource');
+  const remainNum = remain != null ? Number(remain) : null;
+  // Search 有独立配额,不要覆盖页脚展示的 core 剩余
+  if (remainNum != null && resource !== 'search') lastRemaining = remainNum;
+  const link = res.headers.get('link');
 
   if (res.ok) {
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    if (res.status === 204) return { status: 204, json: undefined, link };
+    return { status: res.status, json: await res.json(), link };
   }
 
   let upstream = '';
   try { upstream = (await res.json() as { message?: string }).message ?? ''; } catch { /* 忽略 */ }
   if (res.status === 401) throw new GhError('Token 无效或已过期(HTTP 401)。请在 ⚙ 设置里检查 Personal Access Token。', 401);
-  if (res.status === 403 && lastRemaining === 0) {
-    throw new GhError('GitHub API 限流(HTTP 403):匿名额度仅 60 次/小时。在 ⚙ 设置填入 PAT 即提升到 5000 次/小时。', 403);
+  if (res.status === 403) {
+    const isSearch = resource === 'search' || /\/search\//.test(path);
+    if (remainNum === 0 || /rate limit/i.test(upstream)) {
+      throw new GhError(isSearch
+        ? 'GitHub Search API 限流(HTTP 403):已登录约 30 次/分钟。稍后再点「加载更多」,或改用 PAT。'
+        : 'GitHub API 限流(HTTP 403):匿名额度仅 60 次/小时。在 ⚙ 设置填入 PAT 即提升到 5000 次/小时。', 403);
+    }
   }
   if (res.status === 403) throw new GhError(`权限不足(HTTP 403)${upstream ? `:${upstream}` : ''}。写操作需要对应 RW 权限的 Token。`, 403);
   if (res.status === 404) throw new GhError(`资源不存在(HTTP 404):确认 owner/repo、分支或编号正确;私有仓需 Token 具备读取权限。 ${upstream}`, 404);
   if (res.status === 422) throw new GhError(`请求被 GitHub 拒绝(HTTP 422):${upstream || '参数校验失败'}`, 422);
   throw new GhError(`GitHub API 错误(HTTP ${res.status})${upstream ? `:${upstream}` : ''}`, res.status);
+}
+
+async function gh<T>(path: string, opts: GhOpts = {}): Promise<T> {
+  const r = await ghRequest(path, opts);
+  return r.json as T;
+}
+
+async function ghList<T>(path: string, opts: GhOpts = {}): Promise<{ data: T; nextUrl: string | null }> {
+  const r = await ghRequest(path, opts);
+  return { data: r.json as T, nextUrl: parseLinkNext(r.link) };
 }
 
 // ---------- 公共类型 ----------
@@ -92,8 +117,20 @@ export interface GhPull {
   user: GhUser | null; created_at: string; updated_at: string;
   head: { ref: string; label: string; sha: string };
   base: { ref: string; label: string }; body: string | null;
+  merged_at?: string | null;
   additions?: number; deletions?: number; changed_files?: number;
   mergeable?: boolean | null; mergeable_state?: string;
+}
+
+export type ListSort = 'created' | 'updated';
+export type IssueState = 'open' | 'closed';
+export type PullFilter = 'open' | 'closed' | 'merged';
+
+/** 一页列表:items 是本页,nextUrl 有值就能「加载更多」,totalCount 是仓库真实总数(Search 或并行计数)。 */
+export interface ListPage<T> {
+  items: T[];
+  nextUrl: string | null;
+  totalCount: number | null;
 }
 export interface GhCheckRun {
   id: number; name: string | null; status: string; conclusion: string | null; html_url: string;
@@ -157,25 +194,118 @@ export async function getFileContent(ref: GhRef, path: string, branch: string): 
   };
 }
 
-export async function listIssues(ref: GhRef, state: 'open' | 'closed' | 'all' = 'open'): Promise<GhIssue[]> {
-  const arr = await gh<GhIssue[]>(`/repos/${ghRefKey(ref)}/issues${qs({
-    state, sort: 'updated', direction: 'desc', per_page: 30,
-  })}`);
-  return arr.filter((i) => !i.pull_request);
+const PAGE = 30;
+
+function searchQ(parts: string[]): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+function searchIssueToGh(it: SearchIssue): GhIssue {
+  return {
+    number: it.number,
+    title: it.title,
+    state: it.state,
+    html_url: it.html_url,
+    user: it.user,
+    created_at: it.created_at,
+    updated_at: it.updated_at,
+    closed_at: it.closed_at,
+    comments: it.comments ?? 0,
+    labels: it.labels ?? [],
+    body: it.body,
+    pull_request: it.pull_request,
+  };
+}
+
+function searchIssueToPull(it: SearchIssue): GhPull {
+  const pr = it.pull_request;
+  return {
+    number: it.number,
+    title: it.title,
+    state: it.state,
+    html_url: it.html_url.replace('/issues/', '/pull/'),
+    draft: it.draft === true,
+    user: it.user,
+    created_at: it.created_at,
+    updated_at: it.updated_at,
+    head: { ref: '', label: '', sha: '' },
+    base: { ref: '', label: '' },
+    body: it.body,
+    merged_at: pr && typeof pr === 'object' && pr !== null && 'merged_at' in pr
+      ? (pr as { merged_at?: string | null }).merged_at ?? null
+      : null,
+  };
+}
+
+interface SearchIssue {
+  number: number; title: string; state: 'open' | 'closed'; html_url: string;
+  user: GhUser | null; created_at: string; updated_at: string; closed_at: string | null;
+  comments: number; labels: GhLabel[]; body: string | null; pull_request?: { url?: string; merged_at?: string | null } | unknown;
+  draft?: boolean;
+}
+
+interface SearchPayload { total_count: number; incomplete_results?: boolean; items: SearchIssue[] }
+
+function pageFromUrl(url: string | undefined, fallback = 1): number {
+  if (!url) return fallback;
+  try {
+    const n = Number(new URL(url, API).searchParams.get('page') ?? String(fallback));
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function searchPage(q: string, sort: ListSort, pageUrl?: string): Promise<{ items: SearchIssue[]; nextUrl: string | null; totalCount: number }> {
+  const pageNum = pageFromUrl(pageUrl, 1);
+  const path = `/search/issues${qs({ q, sort, order: 'desc', per_page: PAGE, page: pageNum })}`;
+  const { data } = await ghList<SearchPayload>(path);
+  const items = data.items ?? [];
+  const total = data.total_count ?? 0;
+  const cap = Math.min(total, 1000);
+  const nextUrl = items.length > 0 && pageNum * PAGE < cap
+    ? `/search/issues${qs({ q, sort, order: 'desc', per_page: PAGE, page: pageNum + 1 })}`
+    : null;
+  return { items, nextUrl, totalCount: total };
+}
+
+/** Issues 列表:Search API `is:issue`,不被 PR 占坑;默认按创建时间(网页 Newest)。 */
+export async function listIssues(
+  ref: GhRef,
+  state: IssueState = 'open',
+  sort: ListSort = 'created',
+  pageUrl?: string,
+): Promise<ListPage<GhIssue>> {
+  const q = searchQ([`repo:${ghRefKey(ref)}`, 'is:issue', `is:${state}`]);
+  const page = await searchPage(q, sort, pageUrl);
+  return { items: page.items.map(searchIssueToGh), nextUrl: page.nextUrl, totalCount: page.totalCount };
 }
 
 export async function getIssue(ref: GhRef, n: number): Promise<GhIssue> {
   return gh<GhIssue>(`/repos/${ghRefKey(ref)}/issues/${n}`);
 }
 
-export async function listComments(ref: GhRef, n: number): Promise<GhComment[]> {
-  return gh<GhComment[]>(`/repos/${ghRefKey(ref)}/issues/${n}/comments${qs({ per_page: 60 })}`);
+export async function listComments(ref: GhRef, n: number, pageUrl?: string): Promise<ListPage<GhComment>> {
+  const pageNum = pageFromUrl(pageUrl, 1);
+  const path = `/repos/${ghRefKey(ref)}/issues/${n}/comments${qs({ per_page: 60, page: pageNum })}`;
+  const { data, nextUrl } = await ghList<GhComment[]>(path);
+  const computed = data.length >= 60
+    ? `/repos/${ghRefKey(ref)}/issues/${n}/comments${qs({ per_page: 60, page: pageNum + 1 })}`
+    : null;
+  return { items: data, nextUrl: data.length === 0 ? null : (nextUrl ?? computed), totalCount: null };
 }
 
-export async function listPulls(ref: GhRef, state: 'open' | 'closed' | 'all' = 'open'): Promise<GhPull[]> {
-  return gh<GhPull[]>(`/repos/${ghRefKey(ref)}/pulls${qs({
-    state, sort: 'updated', direction: 'desc', per_page: 30,
-  })}`);
+/** PR 列表:Search `is:pr`(+ is:unmerged / is:merged),closed 与 merged 分开;默认 Newest。 */
+export async function listPulls(
+  ref: GhRef,
+  filter: PullFilter = 'open',
+  sort: ListSort = 'created',
+  pageUrl?: string,
+): Promise<ListPage<GhPull>> {
+  const extra = filter === 'merged' ? 'is:merged' : filter === 'closed' ? 'is:closed is:unmerged' : 'is:open';
+  const q = searchQ([`repo:${ghRefKey(ref)}`, 'is:pr', extra]);
+  const page = await searchPage(q, sort, pageUrl);
+  return { items: page.items.map(searchIssueToPull), nextUrl: page.nextUrl, totalCount: page.totalCount };
 }
 
 export async function getPull(ref: GhRef, n: number): Promise<GhPull> {

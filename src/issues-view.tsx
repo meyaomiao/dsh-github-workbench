@@ -3,11 +3,11 @@
  * 写操作:新建、评论、编辑标题正文、编辑/删除评论、关闭/重开(关闭需确认)。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GwIcon, type IconName } from './icons.ts';
 import * as api from './api.ts';
-import { ghRefKey, labelTextColor, timeAgo, type GhRef } from './lib.ts';
+import { labelTextColor, timeAgo, type GhRef } from './lib.ts';
 import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentComposer, CommentsBlock } from './comments.tsx';
@@ -28,30 +28,51 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
   const [detail, setDetail] = useState<number | null>(initialDetail ?? null);
   useEffect(() => { if (initialDetail != null) onConsumeDeep?.(); }, [initialDetail]);
   const [showNew, setShowNew] = useState(false);
-  const [stateFilter, setStateFilter] = useState<'open' | 'closed'>('open');
+  const [stateFilter, setStateFilter] = useState<api.IssueState>('open');
+  const [sort, setSort] = useState<api.ListSort>('created');
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const reqId = useRef(0);
 
-  // 列表加载:仓库/筛选变化 → 清空进加载态;手动刷新/写操作后 → 静默换新(不闪)
-  const load = useCallback((silent: boolean) => {
-    if (!silent) { setList(null); }
+  // 列表加载:仓库/筛选/排序变化 → 清空进加载态;加载更多 → 追加;写操作后 → 静默换新(不闪)
+  const load = useCallback((silent: boolean, pageUrl?: string) => {
+    const id = pageUrl ? reqId.current : ++reqId.current;
+    if (pageUrl) setLoadingMore(true);
+    else if (!silent) setList(null);
     setError(null);
-    api.listIssues(ghRef, stateFilter)
-      .then((arr) => { setList(arr); if (stateFilter === 'open') onCount(arr.length); })
-      .catch((e) => setError(errText(e)));
-  }, [ghRef.owner, ghRef.repo, onCount, stateFilter]);
+    api.listIssues(ghRef, stateFilter, sort, pageUrl)
+      .then((page) => {
+        if (id !== reqId.current) return;
+        setList((prev) => (pageUrl && prev ? [...prev, ...page.items] : page.items));
+        setNextUrl(page.nextUrl);
+        setTotal(page.totalCount);
+        if (stateFilter === 'open' && page.totalCount != null) onCount(page.totalCount);
+      })
+      .catch((e) => { if (id === reqId.current) setError(errText(e)); })
+      .finally(() => { if (id === reqId.current) setLoadingMore(false); });
+  }, [ghRef.owner, ghRef.repo, onCount, stateFilter, sort]);
 
   useEffect(() => {
-    setList(null); setDetail(null);          // 仓/筛切换才清
+    setList(null); setDetail(null); setNextUrl(null);
     load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ghRef.owner, ghRef.repo, stateFilter]);
+  }, [ghRef.owner, ghRef.repo, stateFilter, sort]);
 
   const reload = useCallback(() => load(true), [load]);
 
   return (
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
-        <span className="gw-open-count">{list ? `${list.length} ${stateFilter === 'open' ? 'open' : 'closed'}` : '…'}</span>
-        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span className="gw-open-count">{list
+          ? `${list.length}${total != null ? ` / ${total}` : ''} ${stateFilter === 'open' ? 'open' : 'closed'}`
+          : '…'}</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <select className="gw-select" style={{ marginLeft: 0, maxWidth: 118 }}
+            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)} title="排序">
+            <option value="created">最新创建</option>
+            <option value="updated">最近更新</option>
+          </select>
           <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
             onClick={() => setStateFilter('open')}>开放</button>
           <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
@@ -64,7 +85,9 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
       <div className="gw-list">
         {error && <ErrorBox msg={error} onRetry={() => reload()} />}
         {!error && !list && <Loading />}
-        {list?.length === 0 && <Empty>没有打开的 Issue。<br />用上方按钮创建第一个。</Empty>}
+        {list?.length === 0 && <Empty>{stateFilter === 'open'
+          ? <>没有打开的 Issue。<br />用上方按钮创建第一个。</>
+          : '没有已关闭的 Issue。'}</Empty>}
         {list?.map((it) => (
           <button key={it.number} className="gw-row" onClick={() => setDetail(it.number)}>
             <span className="gw-stateic"
@@ -87,6 +110,18 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
             <span className="gw-meta">更新<br />{timeAgo(it.updated_at)}</span>
           </button>
         ))}
+        {nextUrl && (
+          <div className="gw-more">
+            <button className="gw-btn" disabled={loadingMore} onClick={() => load(true, nextUrl)}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          </div>
+        )}
+        {!nextUrl && total != null && (list?.length ?? 0) >= 1000 && total > 1000 && (
+          <div className="gw-muted" style={{ textAlign: 'center', padding: '8px 12px 14px' }}>
+            Search 最多展示 1000 条，其余请上 GitHub 网页
+          </div>
+        )}
       </div>
 
       {showNew && (
@@ -150,6 +185,8 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
   const ui = useUI();
   const [issue, setIssue] = useState<api.GhIssue | null>(null);
   const [comments, setComments] = useState<api.GhComment[]>([]);
+  const [commentsNext, setCommentsNext] = useState<string | null>(null);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [eTitle, setETitle] = useState('');
@@ -159,7 +196,7 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
     setError(null);
     Promise.all([api.getIssue(props.ghRef, props.number), api.listComments(props.ghRef, props.number)])
       .then(([i, c]) => {
-        setIssue(i); setComments(c);
+        setIssue(i); setComments(c.items); setCommentsNext(c.nextUrl);
         setETitle(i.title); setEBody(i.body ?? '');
       })
       .catch((e) => setError(errText(e)));
@@ -243,7 +280,19 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
                 </div>
               )}
               <CommentsBlock ghRef={props.ghRef} number={props.number}
-                comments={comments} onChanged={loadAll} />
+                comments={comments} onChanged={loadAll}
+                nextUrl={commentsNext} loadingMore={loadingMoreComments}
+                onLoadMore={() => {
+                  if (!commentsNext) return;
+                  setLoadingMoreComments(true);
+                  api.listComments(props.ghRef, props.number, commentsNext)
+                    .then((page) => {
+                      setComments((prev) => [...prev, ...page.items]);
+                      setCommentsNext(page.nextUrl);
+                    })
+                    .catch((e) => ui.toast(errText(e), 'err'))
+                    .finally(() => setLoadingMoreComments(false));
+                }} />
             </>
           ))}
         </div>

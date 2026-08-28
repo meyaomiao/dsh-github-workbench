@@ -94,9 +94,10 @@ export const GW_CSS = `
 /* ---------- 列表(Code 外三页签共用)---------- */
 .gw-colpane{flex-direction:column}
 .gw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;
-  border-bottom:1px solid var(--dsw-alias-border-l2);flex:none}
+  border-bottom:1px solid var(--dsw-alias-border-l2);flex:none;flex-wrap:wrap}
 .gw-open-count{color:var(--dsw-alias-label-tertiary);font-size:11px}
 .gw-list{flex:1;min-height:0;overflow:auto}
+.gw-more{display:flex;justify-content:center;padding:10px 12px 14px}
 .gw-row{display:flex;gap:9px;padding:9px 12px;border-bottom:1px solid var(--dsw-alias-border-l2);
   cursor:pointer;align-items:flex-start;width:100%;text-align:left;background:none;border-left:none;border-right:none;border-top:none;font-family:inherit;color:inherit;font-size:inherit}
 .gw-row:hover{background:var(--dsw-alias-interactive-bg-hover)}

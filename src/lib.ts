@@ -49,6 +49,16 @@ export function qs(params: Record<string, string | number | undefined>): string 
   return s ? `?${s}` : '';
 }
 
+/** 解析 GitHub `Link` 响应头里的 rel=next(没有下一页则 null)。 */
+export function parseLinkNext(link: string | null | undefined): string | null {
+  if (!link) return null;
+  for (const part of link.split(',')) {
+    const m = /<([^>]+)>\s*;\s*rel="?next"?/i.exec(part);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 // ---------- git trees → 树 ----------
 
 export interface TreeItem {

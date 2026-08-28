@@ -13,7 +13,7 @@ function expect(actual: unknown) {
 }
 import {
   buildTree, parseGithubUrl, clamp, decodeBase64Utf8, labelTextColor,
-  parseGithubRemote, parseRepoInput, qs, timeAgo,
+  parseGithubRemote, parseLinkNext, parseRepoInput, qs, timeAgo,
 } from '../src/lib.ts';
 
 describe('parseGithubRemote(.git/config)', () => {
@@ -85,6 +85,13 @@ describe('杂项', () => {
   });
   it('qs 跳过空值', () => {
     assert.equal(qs({ a: 1, b: undefined, c: '' }), '?a=1');
+  });
+  it('parseLinkNext 取 rel=next,没有则 null', () => {
+    const link = '<https://api.github.com/search/issues?q=r&page=2>; rel="next", <https://api.github.com/search/issues?q=r&page=9>; rel="last"';
+    assert.equal(parseLinkNext(link), 'https://api.github.com/search/issues?q=r&page=2');
+    assert.equal(parseLinkNext('<https://api.github.com/x?page=3>; rel="last"'), null);
+    assert.equal(parseLinkNext(null), null);
+    assert.equal(parseLinkNext(''), null);
   });
   it('labelTextColor 亮底黑字、暗底白字', () => {
     assert.match(labelTextColor('#f0f0f0'), /^#000/);
