@@ -13,6 +13,10 @@
     "type": "git",
     "url": "git+https://github.com/meyaomiao/dsh-github-workbench.git"
   },
+  "homepage": "https://github.com/meyaomiao/dsh-github-workbench#readme",
+  "bugs": {
+    "url": "https://github.com/meyaomiao/dsh-github-workbench/issues"
+  },
   "author": "meyaomiao",
   "keywords": [
     "dsh",

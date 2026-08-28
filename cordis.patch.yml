@@ -5,4 +5,4 @@
 # 前置插件:dsh-better-sidebar(缺省时注册静默跳过,不影响其他功能)。
 - insert:
     - id: github-workbench
-      name: '@dsh-abilities/github-workbench'
+      name: dsh-github-workbench
