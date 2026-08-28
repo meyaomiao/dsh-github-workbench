@@ -4,6 +4,7 @@
 
 **把 GitHub 装进 [DeepSeek Harness](https://github.com/deepseek-ai) 的侧边栏:仓库目录树 + Issues / Pull requests / Actions 页签,读之外直接建 Issue、发 PR、评论、合并、重跑 CI。**
 
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-4d6bfe)](https://github.com/topics/dsh-plugin)
 [![dsh-better-sidebar](https://img.shields.io/badge/生态-dsh--better--sidebar-4d6bfe)](https://github.com/topics/dsh-better-sidebar)
 [![npm](https://img.shields.io/npm/v/dsh-github-workbench)](https://www.npmjs.com/package/dsh-github-workbench)
