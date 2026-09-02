@@ -90,6 +90,12 @@ dsh plugin --profile web add .
 - 根节点流式撑满 TabContent(不用 absolute inset:0,避免逃逸覆盖侧边栏框架)
 - 容器查询三档自适应(<600 抽屉态 / ≥720 / ≥1000);`visible=false` 时暂停轮询省配额
 
+## 📋 兼容性
+
+- DeepSeek Harness `0.1.1-rc.2` 与 `0.1.2-alpha.4`(web profile)
+- DSH `0.1.2-alpha.1` 起已删除 `@deepseek-ai/dsh-client-runtime`;本包从 0.2.4 起不再把它写进 `dsh.client.inject`
+- 升 alpha.4 时侧栏请用 `dsh-better-sidebar@alpha`(0.18.0-alpha.0);0.16.x 不兼容 alpha 线
+
 ## 🛠 开发
 
 ```bash

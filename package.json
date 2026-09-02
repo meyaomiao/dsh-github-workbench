@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-workbench",
   "description": "DSH 插件:在 dsh-better-sidebar 侧边栏提供「GitHub 工作台」——远端仓库目录树 + Issues/PR/Actions 页签,读之外支持建 Issue/PR、评论、合并、重跑 CI;未装 better-sidebar 时自动降级为独立右侧面板",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -33,7 +33,6 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "dsh-better-sidebar"
       ],
       "platform": "web"
