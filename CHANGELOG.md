@@ -3,6 +3,7 @@
 ## 0.2.5
 
 - ModuleLoader client id now comes from `package.json` `name`, so the Desktop 2.0.5 client-modules check passes. Closes the host-only 0.2.3 gap.
+- Compatible with DeepSeek Harness `0.1.2-rc.1` (also `0.1.1-rc.2` / `0.1.2-alpha.4`). Use `dsh-better-sidebar@0.18.0` on that host.
 
 ## 0.2.4
 
