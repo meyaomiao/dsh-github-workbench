@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+
+- ModuleLoader client id now comes from `package.json` `name`, so the Desktop 2.0.5 client-modules check passes. Closes the host-only 0.2.3 gap.
+
 ## 0.2.4
 
 - Compatible with DeepSeek Harness `0.1.2-alpha.4` (also `0.1.1-rc.2`).

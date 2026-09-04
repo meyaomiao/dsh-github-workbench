@@ -1,5 +1,7 @@
 import { build } from 'esbuild';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
+
+const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 await rm('lib', { recursive: true, force: true });
 await mkdir('lib', { recursive: true });
@@ -17,8 +19,9 @@ await build({
 
 // 2) 浏览器端:ModuleLoader 工厂包装(与 dsh-better-sidebar / univer-sidebar 同格式)。
 //    react 与平台模块不打包,由宿主 loader 的 require 解析。
+//    Desktop 2.0.5 checks ModuleLoader id === package.json name.
 const banner = [
-  'window.__ModuleLoader__.load({ id: "@dsh-abilities/github-workbench", factory: (require) => {',
+  `window.__ModuleLoader__.load({ id: ${JSON.stringify(pkg.name)}, factory: (require) => {`,
   'var module = { exports: {} };',
   'var exports = module.exports;',
 ].join('\n');
