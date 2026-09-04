@@ -92,9 +92,9 @@ dsh plugin --profile web add .
 
 ## 📋 兼容性
 
-- DeepSeek Harness `0.1.1-rc.2` 与 `0.1.2-alpha.4`(web profile)
+- DeepSeek Harness `0.1.2-rc.1`（仍兼容 `0.1.1-rc.2` 与 `0.1.2-alpha.4`，web profile）
 - DSH `0.1.2-alpha.1` 起已删除 `@deepseek-ai/dsh-client-runtime`;本包从 0.2.4 起不再把它写进 `dsh.client.inject`
-- 升 alpha.4 时侧栏请用 `dsh-better-sidebar@alpha`(0.18.0-alpha.0);0.16.x 不兼容 alpha 线
+- 侧栏请用 `dsh-better-sidebar@0.18.0`（适配 0.1.2-rc.1）；0.16.x 不兼容 0.1.2 线
 
 ## 🛠 开发
 
