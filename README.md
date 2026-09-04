@@ -107,6 +107,8 @@ pnpm test         # node:test 纯函数单测
 
 设计文档与交互视觉稿:[docs/design.md](./docs/design.md) · [design/mockup.html](./design/mockup.html)
 
+改仓库前先读 [CONTRIBUTING.md](./CONTRIBUTING.md)（Issue → 分支 → Draft PR）。思考原则见 [AI-ISSUE-WORKFLOW.md](./AI-ISSUE-WORKFLOW.md)。
+
 ## License
 
 [MIT](./LICENSE) © meyaomiao
