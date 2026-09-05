@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 收件箱:公开仓新建 Issue 列表、点行跳转、返回原仓页、未读角标。删除自动跟随。 Closes #9。
+
 ## 0.2.5
 
 - ModuleLoader client id now comes from `package.json` `name`, so the Desktop 2.0.5 client-modules check passes. Closes the host-only 0.2.3 gap.

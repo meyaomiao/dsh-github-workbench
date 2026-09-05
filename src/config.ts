@@ -58,10 +58,6 @@ export function loadFontSize(): FontSizePref {
 }
 export function saveFontSize(v: FontSizePref): void { lsSet(FONT_KEY, v === 'dsh' ? '' : v); }
 
-const AUTO_FOLLOW_KEY = 'gw.autoFollow';
-export function loadAutoFollow(): boolean { return lsGet(AUTO_FOLLOW_KEY) !== '0'; }
-export function saveAutoFollow(v: boolean): void { lsSet(AUTO_FOLLOW_KEY, v ? '1' : '0'); }
-
 export function loadSubtab(): string { return lsGet(K.subtab); }
 export function saveSubtab(s: string): void { lsSet(K.subtab, s); }
 

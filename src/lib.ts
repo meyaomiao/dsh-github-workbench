@@ -172,6 +172,36 @@ export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+/**
+ * 把 repo:owner/name OR … 切成不超过 maxLen 的若干组(Search q 长度限制)。
+ * 返回每组的 fullName 列表,空输入返回 [].
+ */
+export function chunkRepoQualifiers(fullNames: readonly string[], maxLen = 220): string[][] {
+  const chunks: string[][] = [];
+  let cur: string[] = [];
+  let len = 0;
+  for (const name of fullNames) {
+    if (!name) continue;
+    const piece = `repo:${name}`;
+    const extra = cur.length === 0 ? piece.length : piece.length + 4; // ' OR '
+    if (cur.length > 0 && len + extra > maxLen) {
+      chunks.push(cur);
+      cur = [name];
+      len = piece.length;
+    } else {
+      cur.push(name);
+      len += extra;
+    }
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+/** 收件箱条目稳定键:owner/repo#n */
+export function inboxItemKey(owner: string, repo: string, n: number): string {
+  return `${owner}/${repo}#${n}`;
+}
+
 /** GitHub contents API 的 base64(可能带换行)→ UTF-8 文本。 */
 export function decodeBase64Utf8(b64: string): string {
   const bin = atob(b64.replace(/\s+/g, ''));
