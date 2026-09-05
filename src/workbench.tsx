@@ -213,8 +213,16 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
     setInboxOpen(false);
     const full = `${item.owner}/${item.repo}`;
     if (full !== repoFull) applyRepo(full, { fromInbox: true });
-    switchTab('issues');
-    setDeep({ tab: 'issues', number: item.number });
+    if (item.kind === 'pr') {
+      switchTab('pulls');
+      setDeep({ tab: 'pulls', number: item.number });
+    } else if (item.kind === 'actions') {
+      switchTab('actions');
+      setDeep({ tab: 'actions' });
+    } else {
+      switchTab('issues');
+      setDeep({ tab: 'issues', number: item.number });
+    }
   }
 
   const switchTab = useCallback((id: Subtab) => {
@@ -247,7 +255,11 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
   useEffect(() => {
     inboxStore.setOnFresh(visible ? (fresh) => {
       const top = fresh[0];
-      if (top) ui.toast(`新 Issue · ${top.owner}/${top.repo} #${top.number}`, 'ok');
+      if (top) {
+        const kind = top.kind === 'pr' ? 'PR' : top.kind === 'actions' ? 'CI' : 'Issue';
+        const id = top.kind === 'actions' ? `run #${top.number}` : `#${top.number}`;
+        ui.toast(`新 ${kind} · ${top.owner}/${top.repo} ${id}`, 'ok');
+      }
     } : null);
     return () => inboxStore.setOnFresh(null);
   }, [visible, ui, inboxStore]);

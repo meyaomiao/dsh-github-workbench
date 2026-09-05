@@ -197,9 +197,11 @@ export function chunkRepoQualifiers(fullNames: readonly string[], maxLen = 220):
   return chunks;
 }
 
-/** 收件箱条目稳定键:owner/repo#n */
-export function inboxItemKey(owner: string, repo: string, n: number): string {
-  return `${owner}/${repo}#${n}`;
+export type InboxKind = 'issue' | 'pr' | 'actions';
+
+/** 收件箱条目稳定键:kind:owner/repo#n */
+export function inboxItemKey(kind: InboxKind, owner: string, repo: string, n: number): string {
+  return `${kind}:${owner}/${repo}#${n}`;
 }
 
 /** GitHub contents API 的 base64(可能带换行)→ UTF-8 文本。 */

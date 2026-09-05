@@ -169,7 +169,7 @@ function NewIssueDrawer(props: { ghRef: GhRef; onClose: () => void; onCreated: (
               setBusy(true); setError(null);
               api.createIssue(props.ghRef, title.trim(), body)
                 .then((it) => { ui.toast(`Issue #${it.number} 已创建`);
-                  getInboxStore().markSelfCreated(inboxItemKey(props.ghRef.owner, props.ghRef.repo, it.number));
+                  getInboxStore().markSelfCreated(inboxItemKey('issue', props.ghRef.owner, props.ghRef.repo, it.number));
                   props.onCreated(it.number); })
                 .catch((e) => { setError(errText(e)); })
                 .finally(() => setBusy(false));

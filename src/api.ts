@@ -398,9 +398,12 @@ export async function searchPublicRepos(q: string): Promise<GhSearchRepo[]> {
 /** 清空仓库列表缓存(token 变更后调用)。 */
 export function invalidateRepoCache(): void { repoCache = null; }
 
-// ---------- 收件箱:跨仓新建 Issue(Search,只看 created) ----------
+// ---------- 收件箱:跨仓新建 Issue/PR(一次 Search 再拆 kind) ----------
+
+export type InboxHitKind = 'issue' | 'pr';
 
 export interface InboxSearchHit {
+  kind: InboxHitKind;
   owner: string;
   repo: string;
   number: number;
@@ -414,16 +417,17 @@ const INBOX_SEARCH_MAX_Q = 6;
 
 function inboxSearchPrefix(createdSinceIso: string, viewer: string | null): string[] {
   const iso = createdSinceIso.replace(/\.\d{3}Z$/, 'Z');
-  const parts = ['is:issue', 'is:public', 'is:open', `created:>=${iso}`];
+  // 不写 is:issue / is:pr:Search /issues 同时返回两者,用 pull_request 字段拆开,省一轮配额。
+  const parts = ['is:public', 'is:open', `created:>=${iso}`];
   if (viewer) parts.push(`-author:${viewer}`);
   return parts;
 }
 
 /**
- * 监视集里 created>=watermark 的公开 Issue。
+ * 监视集里 created>=watermark 的公开 Issue 与新建 PR。
  * 优先 user:/org: 少打 Search,剩余 repo: OR 切批;每轮最多 6 次查询。
  */
-export async function searchIssuesCreatedSince(
+export async function searchInboxCreatedSince(
   repos: readonly string[],
   createdSinceIso: string,
   viewer: string | null,
@@ -468,25 +472,35 @@ export async function searchIssuesCreatedSince(
   for (const q of queries) {
     const page = await searchPage(q, 'created');
     for (const it of page.items) {
-      if (it.pull_request) continue;
       if (it.created_at < createdSinceIso) continue;
       const parsed = parseGithubUrl(it.html_url);
       if (!parsed) continue;
-      const key = `${parsed.ref.owner}/${parsed.ref.repo}#${it.number}`;
+      const kind: InboxHitKind = it.pull_request ? 'pr' : 'issue';
+      const key = `${kind}:${parsed.ref.owner}/${parsed.ref.repo}#${it.number}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      const htmlUrl = kind === 'pr'
+        ? it.html_url.replace('/issues/', '/pull/')
+        : it.html_url;
       hits.push({
+        kind,
         owner: parsed.ref.owner,
         repo: parsed.ref.repo,
         number: it.number,
         title: it.title,
-        htmlUrl: it.html_url,
+        htmlUrl,
         user: it.user?.login ?? 'ghost',
         createdAt: it.created_at,
       });
     }
   }
   return { hits, queryTruncated: leftover.size > 0 };
+}
+
+/** 某仓 created>=since 的 workflow runs(Actions 无跨仓 Search,调用方限制仓数)。 */
+export async function listRunsCreatedSince(ref: GhRef, sinceIso: string): Promise<GhRun[]> {
+  const arr = await listRuns(ref);
+  return arr.filter((r) => r.created_at >= sinceIso);
 }
 
 // ---------- 写(v0.1;破坏性动作由 UI 层二次确认后调用) ----------

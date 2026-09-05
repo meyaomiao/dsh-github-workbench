@@ -1,16 +1,19 @@
 /**
- * 收件箱模块级 store:跨仓公开仓新建 Issue。
+ * 收件箱模块级 store:跨仓公开仓新建 Issue / PR,以及少量仓的新 Actions run。
  * 轮询不绑 Workbench visible(侧栏切走仍慢刷角标)。
  * 纯合并/切批可单测;fetch 经 deps 注入。
  */
 
-import { inboxItemKey } from './lib.ts';
+import { inboxItemKey, parseRepoInput, type InboxKind } from './lib.ts';
 import * as api from './api.ts';
 import * as cfg from './config.ts';
-import type { InboxSearchHit, RepoLite } from './api.ts';
+import type { InboxSearchHit, RepoLite, GhRun } from './api.ts';
+
+export type { InboxKind };
 
 export interface InboxItem {
   key: string;
+  kind: InboxKind;
   owner: string;
   repo: string;
   number: number;
@@ -24,6 +27,7 @@ export interface InboxItem {
 export interface InboxSnapshot {
   items: InboxItem[];
   unreadCount: number;
+  unreadByKind: Record<InboxKind, number>;
   truncatedWatch: boolean;
   lastError: string | null;
   hasToken: boolean;
@@ -40,11 +44,13 @@ export interface InboxDeps {
   myReposTruncated(): boolean;
   loadHiddenRepos(): string[];
   getViewerLogin(): Promise<string | null>;
-  searchIssuesCreatedSince(
+  searchInboxCreatedSince(
     repos: readonly string[],
     createdSinceIso: string,
     viewer: string | null,
   ): Promise<{ hits: InboxSearchHit[]; queryTruncated: boolean }>;
+  listRunsCreatedSince(ref: { owner: string; repo: string }, sinceIso: string): Promise<GhRun[]>;
+  loadRecentRepos(): string[];
   now?(): number;
   storage?: InboxStorage;
 }
@@ -61,7 +67,8 @@ const BACKOFF_MS = 60_000;
 
 export function hitToItem(hit: InboxSearchHit, unread: boolean): InboxItem {
   return {
-    key: inboxItemKey(hit.owner, hit.repo, hit.number),
+    key: inboxItemKey(hit.kind, hit.owner, hit.repo, hit.number),
+    kind: hit.kind,
     owner: hit.owner,
     repo: hit.repo,
     number: hit.number,
@@ -71,6 +78,37 @@ export function hitToItem(hit: InboxSearchHit, unread: boolean): InboxItem {
     createdAt: hit.createdAt,
     unread,
   };
+}
+
+export function runToItem(owner: string, repo: string, run: GhRun, unread: boolean): InboxItem {
+  return {
+    key: inboxItemKey('actions', owner, repo, run.id),
+    kind: 'actions',
+    owner,
+    repo,
+    number: run.id,
+    title: run.display_title || run.name || `run #${run.id}`,
+    htmlUrl: run.html_url,
+    user: run.actor?.login ?? 'ghost',
+    createdAt: run.created_at,
+    unread,
+  };
+}
+
+function capByKind(items: InboxItem[]): InboxItem[] {
+  const buckets: Record<InboxKind, InboxItem[]> = { issue: [], pr: [], actions: [] };
+  for (const it of items) buckets[it.kind].push(it);
+  return [
+    ...buckets.issue.slice(0, 50),
+    ...buckets.pr.slice(0, 50),
+    ...buckets.actions.slice(0, 30),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function unreadByKind(items: readonly InboxItem[]): Record<InboxKind, number> {
+  const out: Record<InboxKind, number> = { issue: 0, pr: 0, actions: 0 };
+  for (const it of items) if (it.unread) out[it.kind] += 1;
+  return out;
 }
 
 /** 合并新命中:已有 key 不改(保留已读);selfKeys 进箱但 unread=false。 */
@@ -89,9 +127,7 @@ export function mergeIncoming(
     map.set(it.key, next);
     if (unread) fresh.push(next);
   }
-  const items = [...map.values()]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, MAX_ITEMS);
+  const items = capByKind([...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   return { items, fresh };
 }
 
@@ -118,14 +154,40 @@ function browserStorage(): InboxStorage {
   };
 }
 
+function parseKind(v: unknown): InboxKind {
+  return v === 'pr' || v === 'actions' || v === 'issue' ? v : 'issue';
+}
+
 function parseItems(raw: string | null): InboxItem[] {
   if (!raw) return [];
   try {
     const arr = JSON.parse(raw) as unknown;
     if (!Array.isArray(arr)) return [];
-    return arr.filter((x): x is InboxItem =>
-      x && typeof x === 'object' && typeof (x as InboxItem).key === 'string'
-      && typeof (x as InboxItem).number === 'number');
+    const out: InboxItem[] = [];
+    for (const x of arr) {
+      if (!x || typeof x !== 'object') continue;
+      const o = x as Record<string, unknown>;
+      if (typeof o.key !== 'string' || typeof o.number !== 'number') continue;
+      let kind = parseKind(o.kind);
+      let key = o.key;
+      if (!key.startsWith('issue:') && !key.startsWith('pr:') && !key.startsWith('actions:')) {
+        kind = 'issue';
+        key = inboxItemKey('issue', String(o.owner ?? ''), String(o.repo ?? ''), o.number);
+      }
+      out.push({
+        key,
+        kind,
+        owner: String(o.owner ?? ''),
+        repo: String(o.repo ?? ''),
+        number: o.number,
+        title: String(o.title ?? ''),
+        htmlUrl: String(o.htmlUrl ?? ''),
+        user: String(o.user ?? 'ghost'),
+        createdAt: String(o.createdAt ?? ''),
+        unread: o.unread !== false,
+      });
+    }
+    return out;
   } catch { return []; }
 }
 
@@ -133,9 +195,16 @@ function parseRead(raw: string | null): Set<string> {
   if (!raw) return new Set();
   try {
     const arr = JSON.parse(raw) as unknown;
-    return Array.isArray(arr)
-      ? new Set(arr.filter((x): x is string => typeof x === 'string').slice(0, MAX_READ))
-      : new Set();
+    if (!Array.isArray(arr)) return new Set();
+    const next = new Set<string>();
+    for (const x of arr) {
+      if (typeof x !== 'string') continue;
+      next.add(x);
+      if (!x.startsWith('issue:') && !x.startsWith('pr:') && !x.startsWith('actions:')) {
+        next.add(`issue:${x}`);
+      }
+    }
+    return next;
   } catch { return new Set(); }
 }
 
@@ -159,6 +228,7 @@ export function createInboxStore(deps: InboxDeps) {
   let snapCache: InboxSnapshot = {
     items,
     unreadCount: unreadCountOf(items),
+    unreadByKind: unreadByKind(items),
     truncatedWatch,
     lastError,
     hasToken: Boolean(deps.getToken()),
@@ -178,6 +248,7 @@ export function createInboxStore(deps: InboxDeps) {
     snapCache = {
       items,
       unreadCount: currentUnread(),
+      unreadByKind: deps.getToken() ? unreadByKind(items) : { issue: 0, pr: 0, actions: 0 },
       truncatedWatch,
       lastError,
       hasToken: Boolean(deps.getToken()),
@@ -206,17 +277,38 @@ export function createInboxStore(deps: InboxDeps) {
       .map((r) => r.fullName);
     if (extraWatch && !names.includes(extraWatch) && !hidden.has(extraWatch)) names.push(extraWatch);
     truncatedWatch = deps.myReposTruncated();
-    if (names.length === 0) {
+    const incoming: InboxItem[] = [];
+    if (names.length > 0) {
+      const viewer = await deps.getViewerLogin();
+      const allowed = new Set(names);
+      const { hits, queryTruncated } = await deps.searchInboxCreatedSince(names, watermark, viewer);
+      if (queryTruncated) truncatedWatch = true;
+      for (const h of hits) {
+        if (!allowed.has(`${h.owner}/${h.repo}`)) continue;
+        incoming.push(hitToItem(h, true));
+      }
+    }
+    const actionRepos: string[] = [];
+    for (const n of [extraWatch, ...deps.loadRecentRepos()]) {
+      if (!n || hidden.has(n) || actionRepos.includes(n)) continue;
+      actionRepos.push(n);
+      if (actionRepos.length >= 5) break;
+    }
+    for (const full of actionRepos) {
+      const ref = parseRepoInput(full);
+      if (!ref) continue;
+      try {
+        const runs = await deps.listRunsCreatedSince(ref, watermark);
+        for (const run of runs) incoming.push(runToItem(ref.owner, ref.repo, run, true));
+      } catch { /* 私有仓 / 无 Actions 权限:跳过 */ }
+    }
+    if (incoming.length === 0 && names.length === 0) {
       lastError = null;
+      persist();
+      emit();
+      firstTick = false;
       return [];
     }
-    const viewer = await deps.getViewerLogin();
-    const allowed = new Set(names);
-    const { hits, queryTruncated } = await deps.searchIssuesCreatedSince(names, watermark, viewer);
-    if (queryTruncated) truncatedWatch = true;
-    const incoming = hits
-      .filter((h) => allowed.has(`${h.owner}/${h.repo}`))
-      .map((h) => hitToItem(h, true));
     const merged = mergeIncoming(items, incoming, readKeys, selfKeys);
     items = merged.items;
     const newest = incoming.reduce((acc, h) => (h.createdAt > acc ? h.createdAt : acc), watermark);
@@ -287,9 +379,10 @@ export function createInboxStore(deps: InboxDeps) {
     emit();
   }
 
-  function markAllRead(): void {
-    readKeys = new Set([...readKeys, ...items.map((it) => it.key)]);
-    items = items.map((it) => (it.unread ? { ...it, unread: false } : it));
+  function markAllRead(kind?: InboxKind): void {
+    const keys = items.filter((it) => !kind || it.kind === kind).map((it) => it.key);
+    readKeys = new Set([...readKeys, ...keys]);
+    items = items.map((it) => ((!kind || it.kind === kind) && it.unread ? { ...it, unread: false } : it));
     persist();
     emit();
   }
@@ -347,6 +440,8 @@ export function liveInboxDeps(): InboxDeps {
     myReposTruncated: api.myReposTruncated,
     loadHiddenRepos: cfg.loadHiddenRepos,
     getViewerLogin: api.getViewerLogin,
-    searchIssuesCreatedSince: api.searchIssuesCreatedSince,
+    searchInboxCreatedSince: api.searchInboxCreatedSince,
+    listRunsCreatedSince: api.listRunsCreatedSince,
+    loadRecentRepos: cfg.loadRecentRepos,
   };
 }

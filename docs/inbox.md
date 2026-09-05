@@ -1,6 +1,6 @@
 # GitHub 工作台 · 收件箱方案
 
-> 状态:**已按本文落码**(工作台覆盖层列表 + 点行跳转 + 返回原仓页 + 未读角标;活动哨兵已删)。
+> 状态:**已落码并扩充分页签**(Issues / Pull requests / Actions)。
 > 宿主:现有 `packages/github-workbench`(侧栏 tab / 独立面板双形态)。
 > 不改 DSH 源码,不新开 better-sidebar 页签。
 
@@ -10,12 +10,13 @@
 
 | 决策点 | 选择 |
 |---|---|
-| 监视范围 | Token 可见的**全部公开仓**(owner / collaborator / org member,`private=false`) |
-| 点击一条 | **直接跳转**(三次拍板,取代箱内抽屉)。点行 = 关箱 + 切到该仓 Issues 详情。进箱前的仓页快照一直挂着,直到点「← 返回原仓页」 |
-| 与自动跟随 | **关掉跟随,用收件箱替换**(二次拍板)。删除活动哨兵与设置项;工作台不再因任何新活动自动 `switchTab` / `applyRepo`。切仓只走人点收件箱那一行 |
+| 监视范围 | **Issues / PR**:Token 可见的全部公开仓。**Actions**:当前仓 + 最近使用公开仓,最多 5 个(无跨仓 Search) |
+| 点击一条 | **直接跳转**。点行 = 关箱 + 切到该仓对应页签(Issues 详情 / PR 详情 / Actions 列表) |
+| 与自动跟随 | **关掉跟随**。切仓只走人点收件箱那一行 |
+| 箱内结构 | Issues / Pull requests / Actions **三分栏**;外面一个未读合计角标 |
 
-不做:评论、PR、CI、关闭/重开、label 变更进箱;GitHub webhook / 服务端推送;iframe 嵌 github.com。
-自动跟随也不再监视 PR / CI——那些活动继续只出现在各自页签,人要点才进去。本版不把 PR/CI 扩进收件箱。
+不做:评论 / Review 请求 / 关闭重开 / label 变更进箱;GitHub webhook / 系统桌面通知。
+PR 只收**新建**;Actions 只收监视仓里 `created>=watermark` 的新 run。
 
 ---
 
