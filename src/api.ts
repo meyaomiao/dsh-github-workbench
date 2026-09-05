@@ -3,7 +3,7 @@
  * Bearer PAT 鉴权、限流/错误归一为中文可操作提示,全部端点类型化。
  */
 
-import { qs, decodeBase64Utf8, parseLinkNext, type GhRef, ghRefKey } from './lib.ts';
+import { qs, decodeBase64Utf8, parseLinkNext, parseGithubUrl, chunkRepoQualifiers, type GhRef, ghRefKey } from './lib.ts';
 
 const API = 'https://api.github.com';
 const TOKEN_KEY = 'gw.token';
@@ -339,19 +339,43 @@ interface RawUserRepo {
   owner: { login: string };
 }
 
-let repoCache: { at: number; data: RepoLite[] } | null = null;
+let repoCache: { at: number; data: RepoLite[]; truncated: boolean } | null = null;
 const REPO_CACHE_TTL = 5 * 60_000;
+const REPO_PAGE_CAP = 3;
+const REPO_HARD_CAP = 300;
 
-/** 当前 Token 可见的全部仓库(owner + 协作 + 组织成员),按最近推送排序;5 分钟缓存。 */
+/** 当前 Token 可见的全部仓库(owner + 协作 + 组织成员),按最近推送排序;5 分钟缓存。跟分页,硬顶 300。 */
 export async function getMyRepos(force = false): Promise<RepoLite[]> {
   if (!force && repoCache && Date.now() - repoCache.at < REPO_CACHE_TTL) return repoCache.data;
-  const arr = await gh<RawUserRepo[]>('/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member');
-  const data = arr
-    .filter((r) => !r.archived)
-    .map((r) => ({ fullName: r.full_name, isPrivate: r.private, pushedAt: r.pushed_at, description: r.description, ownerLogin: r.owner?.login ?? '' }))
-    .sort((a, b) => b.pushedAt.localeCompare(a.pushedAt));
-  repoCache = { at: Date.now(), data };
+  const data: RepoLite[] = [];
+  let path: string | null = '/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member';
+  let pages = 0;
+  let truncated = false;
+  while (path && pages < REPO_PAGE_CAP) {
+    const page: { data: RawUserRepo[]; nextUrl: string | null } = await ghList<RawUserRepo[]>(path);
+    pages += 1;
+    for (const r of page.data) {
+      if (r.archived) continue;
+      data.push({
+        fullName: r.full_name, isPrivate: r.private, pushedAt: r.pushed_at,
+        description: r.description, ownerLogin: r.owner?.login ?? '',
+      });
+    }
+    path = page.nextUrl;
+    if (path && pages >= REPO_PAGE_CAP) truncated = true;
+  }
+  data.sort((a, b) => b.pushedAt.localeCompare(a.pushedAt));
+  if (data.length > REPO_HARD_CAP) {
+    data.length = REPO_HARD_CAP;
+    truncated = true;
+  }
+  repoCache = { at: Date.now(), data, truncated };
   return data;
+}
+
+/** 最近一次 getMyRepos 是否因 300 顶而截断。 */
+export function myReposTruncated(): boolean {
+  return repoCache?.truncated ?? false;
 }
 
 export interface GhSearchRepo {
@@ -374,21 +398,109 @@ export async function searchPublicRepos(q: string): Promise<GhSearchRepo[]> {
 /** 清空仓库列表缓存(token 变更后调用)。 */
 export function invalidateRepoCache(): void { repoCache = null; }
 
-// ---------- 活动哨兵(自动跟随仓库活动) ----------
+// ---------- 收件箱:跨仓新建 Issue/PR(一次 Search 再拆 kind) ----------
 
-/** 自某时间点起更新的 Issues(含关闭/重开,过滤 PR)。 */
-export async function listIssuesSince(ref: GhRef, sinceIso: string): Promise<GhIssue[]> {
-  const arr = await gh<GhIssue[]>(`/repos/${ghRefKey(ref)}/issues${qs({
-    state: 'all', sort: 'updated', direction: 'desc', since: sinceIso, per_page: 20,
-  })}`);
-  return arr.filter((i) => !i.pull_request);
+export type InboxHitKind = 'issue' | 'pr';
+
+export interface InboxSearchHit {
+  kind: InboxHitKind;
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  htmlUrl: string;
+  user: string;
+  createdAt: string;
 }
 
-/** 自某时间点起更新的 PR(含合并/关闭)。 */
-export async function listPullsSince(ref: GhRef, sinceIso: string): Promise<GhPull[]> {
-  return gh<GhPull[]>(`/repos/${ghRefKey(ref)}/pulls${qs({
-    state: 'all', sort: 'updated', direction: 'desc', per_page: 20,
-  })}`).then((arr) => arr.filter((p2) => p2.updated_at >= sinceIso));
+const INBOX_SEARCH_MAX_Q = 6;
+
+function inboxSearchPrefix(createdSinceIso: string, viewer: string | null): string[] {
+  const iso = createdSinceIso.replace(/\.\d{3}Z$/, 'Z');
+  // 不写 is:issue / is:pr:Search /issues 同时返回两者,用 pull_request 字段拆开,省一轮配额。
+  const parts = ['is:public', 'is:open', `created:>=${iso}`];
+  if (viewer) parts.push(`-author:${viewer}`);
+  return parts;
+}
+
+/**
+ * 监视集里 created>=watermark 的公开 Issue 与新建 PR。
+ * 优先 user:/org: 少打 Search,剩余 repo: OR 切批;每轮最多 6 次查询。
+ */
+export async function searchInboxCreatedSince(
+  repos: readonly string[],
+  createdSinceIso: string,
+  viewer: string | null,
+): Promise<{ hits: InboxSearchHit[]; queryTruncated: boolean }> {
+  const prefix = inboxSearchPrefix(createdSinceIso, viewer);
+  const leftover = new Set(repos.filter(Boolean));
+  const queries: string[] = [];
+
+  if (viewer) {
+    queries.push(searchQ([...prefix, `user:${viewer}`]));
+    for (const r of leftover) {
+      if (r.startsWith(`${viewer}/`)) leftover.delete(r);
+    }
+  }
+
+  const otherOwners = new Map<string, string[]>();
+  for (const r of leftover) {
+    const owner = r.split('/')[0] ?? '';
+    const list = otherOwners.get(owner) ?? [];
+    list.push(r);
+    otherOwners.set(owner, list);
+  }
+  const orgOwners = [...otherOwners.entries()]
+    .filter(([, list]) => list.length >= 2)
+    .map(([owner]) => owner);
+
+  for (const org of orgOwners) {
+    if (queries.length >= INBOX_SEARCH_MAX_Q) break;
+    queries.push(searchQ([...prefix, `org:${org}`]));
+    for (const r of otherOwners.get(org) ?? []) leftover.delete(r);
+  }
+
+  for (const chunk of chunkRepoQualifiers([...leftover], 220)) {
+    if (queries.length >= INBOX_SEARCH_MAX_Q) break;
+    const orPart = chunk.map((n) => `repo:${n}`).join(' OR ');
+    queries.push(searchQ([...prefix, `(${orPart})`]));
+    for (const n of chunk) leftover.delete(n);
+  }
+
+  const hits: InboxSearchHit[] = [];
+  const seen = new Set<string>();
+  for (const q of queries) {
+    const page = await searchPage(q, 'created');
+    for (const it of page.items) {
+      if (it.created_at < createdSinceIso) continue;
+      const parsed = parseGithubUrl(it.html_url);
+      if (!parsed) continue;
+      const kind: InboxHitKind = it.pull_request ? 'pr' : 'issue';
+      const key = `${kind}:${parsed.ref.owner}/${parsed.ref.repo}#${it.number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const htmlUrl = kind === 'pr'
+        ? it.html_url.replace('/issues/', '/pull/')
+        : it.html_url;
+      hits.push({
+        kind,
+        owner: parsed.ref.owner,
+        repo: parsed.ref.repo,
+        number: it.number,
+        title: it.title,
+        htmlUrl,
+        user: it.user?.login ?? 'ghost',
+        createdAt: it.created_at,
+      });
+    }
+  }
+  return { hits, queryTruncated: leftover.size > 0 };
+}
+
+/** 某仓 created>=since 的 workflow runs(Actions 无跨仓 Search,调用方限制仓数)。 */
+export async function listRunsCreatedSince(ref: GhRef, sinceIso: string): Promise<GhRun[]> {
+  const arr = await listRuns(ref);
+  return arr.filter((r) => r.created_at >= sinceIso);
 }
 
 // ---------- 写(v0.1;破坏性动作由 UI 层二次确认后调用) ----------

@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GwIcon } from './icons.ts';
 import * as api from './api.ts';
-import { timeAgo, type GhRef } from './lib.ts';
+import { inboxItemKey, timeAgo, type GhRef } from './lib.ts';
+import { getInboxStore } from './inbox-store.ts';
 import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentsBlock, CommentComposer } from './comments.tsx';
@@ -200,7 +201,7 @@ function NewPRDrawer(props: {
                 setBusy(true); setError(null);
                 api.createPull(props.ghRef, { title: title.trim(), body, head: head.trim(), base })
                   .then((pr) => { ui.toast(`PR #${pr.number} 已创建`);
-                  (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`pulls:${pr.number}`);
+                  getInboxStore().markSelfCreated(inboxItemKey('pr', props.ghRef.owner, props.ghRef.repo, pr.number));
                   props.onCreated(pr.number); })
                   .catch((e) => setError(errText(e)))
                   .finally(() => setBusy(false));
@@ -277,7 +278,6 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
     }))) return;
     setBusy(true);
     try {
-      (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`pulls:${pull.number}`);
       await api.mergePull(props.ghRef, pull.number, method);
       ui.toast(`PR #${pull.number} 已合并(${METHOD_LABEL[method]})`);
       props.onChanged(); loadAll();

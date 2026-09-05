@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GwIcon, type IconName } from './icons.ts';
 import * as api from './api.ts';
-import { labelTextColor, timeAgo, type GhRef } from './lib.ts';
+import { inboxItemKey, labelTextColor, timeAgo, type GhRef } from './lib.ts';
+import { getInboxStore } from './inbox-store.ts';
 import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentComposer, CommentsBlock } from './comments.tsx';
@@ -168,7 +169,7 @@ function NewIssueDrawer(props: { ghRef: GhRef; onClose: () => void; onCreated: (
               setBusy(true); setError(null);
               api.createIssue(props.ghRef, title.trim(), body)
                 .then((it) => { ui.toast(`Issue #${it.number} 已创建`);
-                  (window as unknown as { __gwSelfMark?: (k: string) => void }).__gwSelfMark?.(`issues:${it.number}`);
+                  getInboxStore().markSelfCreated(inboxItemKey('issue', props.ghRef.owner, props.ghRef.repo, it.number));
                   props.onCreated(it.number); })
                 .catch((e) => { setError(errText(e)); })
                 .finally(() => setBusy(false));

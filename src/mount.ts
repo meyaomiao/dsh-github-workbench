@@ -16,6 +16,7 @@ import { iconFor } from './icons.ts';
 import { WorkbenchApp } from './workbench.tsx';
 import { ensureStyles } from './styles.ts';
 import { loadPanelWidth, savePanelWidth } from './config.ts';
+import { getInboxStore } from './inbox-store.ts';
 
 export const TAB_ID = 'github-workbench:repo';
 
@@ -29,10 +30,11 @@ function lookup(ctx: ClientCtx): SidebarRegistry | undefined {
 
 export function mountWorkbench(ctx: ClientCtx): () => void {
   ensureStyles();
+  const stopInbox = getInboxStore().start();
   const immediate = lookup(ctx);
   if (immediate) {
     const disposeTab = mountAsTab(ctx, immediate);
-    return () => disposeTab();
+    return () => { stopInbox(); disposeTab(); };
   }
 
   let tabDisposer: (() => void) | null = null;
@@ -112,9 +114,32 @@ export function mountWorkbench(ctx: ClientCtx): () => void {
 
   return () => {
     clearInterval(timer);
+    stopInbox();
     tabDisposer?.();
     standaloneDisposer?.();
   };
+}
+
+function inboxTitle(): string {
+  const n = getInboxStore().unreadCount();
+  return n > 0 ? `GitHub 工作台 (${n})` : 'GitHub 工作台';
+}
+
+function bindInboxBadge(registry: SidebarRegistry): () => void {
+  const paint = (): void => {
+    const n = getInboxStore().unreadCount();
+    const title = n > 0 ? `GitHub 工作台 (${n})` : 'GitHub 工作台';
+    const tabs = registry.getSnapshot?.().state?.tabs ?? [];
+    const ours = tabs.filter((t) => t.type === TAB_ID);
+    if (ours.length === 0) {
+      try { registry.updateTab?.(TAB_ID, { title }); } catch { /* 无已开 tab */ }
+      return;
+    }
+    for (const t of ours) {
+      try { registry.updateTab?.(t.id, { title }); } catch { /* 忽略单条失败 */ }
+    }
+  };
+  return getInboxStore().subscribe(paint);
 }
 
 // ---------- 形态一:better-sidebar tab ----------
@@ -122,9 +147,13 @@ export function mountWorkbench(ctx: ClientCtx): () => void {
 function mountAsTab(ctx: ClientCtx, registry: SidebarRegistry): () => void {
   const descriptor: TabDescriptorLike = {
     id: TAB_ID,
-    title: () => 'GitHub 工作台',
+    title: inboxTitle,
     icon: iconFor('octo'),
     order: 55,
+    badge: () => {
+      const n = getInboxStore().unreadCount();
+      return n > 0 ? n : null;
+    },
     // 认领聊天中的 github.com 链接(需宿主「接管外链」开关开启):
     // 每个链接铸造独立实例,URL 落在 tab.path,由 WorkbenchApp 解析深链
     urlTarget: (url) => /(^|\.)github\.com$/.test(url.hostname),
@@ -160,7 +189,8 @@ function mountAsTab(ctx: ClientCtx, registry: SidebarRegistry): () => void {
   } catch (error) {
     console.warn('[github-workbench] registerTab 失败:', error);
   }
-  return () => disposer?.();
+  const unsubBadge = bindInboxBadge(registry);
+  return () => { unsubBadge(); disposer?.(); };
 }
 
 // ---------- 形态二:独立右侧面板 ----------
@@ -283,7 +313,17 @@ function mountStandalone(): () => void {
   host.style.width = `${width}px`;
   render();
 
+  const paintEdge = (): void => {
+    const n = getInboxStore().unreadCount();
+    edge.textContent = n > 0 ? `🐙 工作台 · ${n}` : '🐙 工作台';
+    if (n > 0) edge.setAttribute('data-gw-inbox-unread', String(n));
+    else edge.removeAttribute('data-gw-inbox-unread');
+  };
+  paintEdge();
+  const unsubEdge = getInboxStore().subscribe(paintEdge);
+
   return () => {
+    unsubEdge();
     state.observer?.disconnect();
     state.root.unmount();
     host.remove();

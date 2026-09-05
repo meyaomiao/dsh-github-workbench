@@ -12,9 +12,15 @@ export interface ClientCtx {
   effect(fn: () => (() => void) | void, label?: string): void;
 }
 
-/** better-sidebar 注册表的本地最小契约(只用 registerTab)。 */
+/** better-sidebar 注册表的本地最小契约(registerTab + 可选 badge 刷新)。 */
 export interface SidebarRegistry {
   registerTab(descriptor: TabDescriptorLike): () => void;
+  features?: readonly string[];
+  updateTab?(tabId: string, patch: { title?: string; path?: string; meta?: unknown }): void;
+  getSnapshot?: () => {
+    state?: { tabs?: readonly { id: string; type: string }[] };
+    prefs?: { pluginSettings?: Record<string, Record<string, unknown>> };
+  };
 }
 
 /** 会话作用域(与 better-sidebar 的 SessionScope 对齐的字段子集)。 */
@@ -54,5 +60,6 @@ export interface TabDescriptorLike {
   /** 自定义铸造(每个链接独立实例,URL 落在 tab.path)。 */
   createTab?: (state: { nextBrowser: number }) =>
     { tab: SidebarTabLite; patch?: Record<string, unknown> } | null;
+  badge?: () => string | number | null | undefined;
   component: (props: TabPropsLike) => ReactNode;
 }

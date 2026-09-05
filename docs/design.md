@@ -173,6 +173,8 @@ packages/github-workbench/
 
 - **v0.1(本次)= 读 + 上表全部写操作**;不做:release 管理、code review 逐行评论、
   项目板/Pages/仓库设置类管理(后续版本按需加);
+- **收件箱**(见 [inbox.md](./inbox.md)):工作台内覆盖层,Issues / PR / Actions 三分栏;
+  Issues·PR 监视公开仓新建单,Actions 盯当前仓+最近最多 5 个公开仓;点行跳到对应页签,「← 返回原仓页」回到进箱前。
 - 已知限制:超大仓 recursive tree 可能 truncated(有降级);写操作依赖 token 权限,
   无权时按钮置灰并在 tooltip 说明缺哪个权限;Issues/PR 列表走 Search API(跟网页一致、带真实总数与分页),
   Search 单次查询最多返回 1000 条、已登录约 30 次/分钟,超额时点「加载更多」会提示稍候;

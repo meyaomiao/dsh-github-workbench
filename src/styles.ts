@@ -31,11 +31,15 @@ export const GW_CSS = `
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%23888f9c' d='M12.78 5.22a.749.749 0 00-1.06 0L8 9.44 4.28 5.72a.749.749 0 10-1.06 1.06l4.25 4.25c.146.147.338.22.53.22s.384-.072.53-.22l4.25-4.25a.749.749 0 000-1.06z'/></svg>");
   background-repeat:no-repeat;background-position:right 5px center;background-size:10px}
 .gw-hbtn{width:26px;height:26px;border:none;background:none;color:var(--dsw-alias-label-secondary);
-  border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;padding:0}
+  border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;padding:0;position:relative}
 .gw-hbtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .gw-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-label-tertiary)}
 .gw-dot.ok{background:var(--dsw-alias-state-success-primary)}
 .gw-dot.bad{background:var(--dsw-alias-state-danger-primary)}
+.gw-hbtn .gw-inbox-badge{position:absolute;top:-2px;right:-2px;min-width:14px;height:14px;padding:0 3px;
+  border-radius:999px;font-size:9px;line-height:14px;text-align:center;
+  background:var(--dsw-alias-state-danger-primary);color:var(--dsw-alias-bg-layer-1);font-weight:600}
+.gw-hbtn.has-unread{color:var(--dsw-alias-state-danger-primary)}
 
 /* ---------- 弹层(仓库切换 / 设置)---------- */
 .gw-pop{position:absolute;top:calc(100% + 4px);z-index:40;width:min(320px,calc(100vw - 24px));
@@ -75,6 +79,15 @@ export const GW_CSS = `
 
 /* ---------- 主体 / 页脚 ---------- */
 .gw-body{flex:1;min-height:0;position:relative;display:flex}
+.gw-inbox{position:absolute;inset:0;z-index:28;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;min-height:0}
+.gw-inbox .gw-list{flex:1}
+.gw-inbox-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;
+  border-bottom:1px solid var(--dsw-alias-border-l2);flex:none;flex-wrap:wrap}
+.gw-inbox-return{display:flex;align-items:center;gap:8px;padding:5px 12px;
+  border-bottom:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);flex:none}
+.gw-inbox-dot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:5px;background:transparent;border:1px solid var(--dsw-alias-border-l1)}
+.gw-inbox-dot.on{background:var(--dsw-alias-state-danger-primary);border-color:var(--dsw-alias-state-danger-primary)}
+.gw-row.gw-inbox-unread .gw-rowtitle{font-weight:600}
 .gw-footer{display:flex;justify-content:space-between;gap:12px;padding:5px 12px;
   border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-tertiary);font-size:10px}
 
