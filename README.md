@@ -13,6 +13,8 @@
 
 *人在面板里亲自点按钮 = 天然的人类审批,无需任何额外审批链。*
 
+**0.2.6** 新增收件箱:头部托盘看公开仓新建 Issue / PR,以及最近仓的 Actions;点行跳到对应页签,可返回进箱前的仓库。
+
 </div>
 
 ---
@@ -31,9 +33,9 @@
 |---|---|
 | ![Actions](screenshots/05-actions.png) | ![Switcher](screenshots/06-repo-switcher.png) |
 
-| ⚙ 设置(Token / 自动刷新 / 字号) |
-|---|
-| ![Settings](screenshots/07-settings.png) |
+| ⚙ 设置(Token / 自动刷新 / 字号) | 收件箱(Issues / PR / Actions 三分栏) |
+|---|---|
+| ![Settings](screenshots/07-settings.png) | ![Inbox](screenshots/08-inbox.png) |
 
 ## 🚀 核心能力
 
