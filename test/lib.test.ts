@@ -14,6 +14,8 @@ function expect(actual: unknown) {
 import {
   buildTree, parseGithubUrl, clamp, decodeBase64Utf8, labelTextColor,
   parseGithubRemote, parseLinkNext, parseRepoInput, qs, timeAgo,
+  formatGhErrorDetail, isRestIssuesListUrl, isRestPullsListUrl,
+  excludePullsFromIssueList, filterPullsByMerged,
 } from '../src/lib.ts';
 
 describe('parseGithubRemote(.git/config)', () => {
@@ -116,5 +118,62 @@ describe('parseGithubUrl', () => {
   });
   it('非 github 域 → null', () => {
     expect(parseGithubUrl('https://gitlab.com/a/b')).toBeNull();
+  });
+});
+
+describe('formatGhErrorDetail(GitHub 422 JSON)', () => {
+  it('空 q:message + Search.q missing', () => {
+    const body = {
+      message: 'Validation Failed',
+      errors: [{ resource: 'Search', field: 'q', code: 'missing' }],
+    };
+    assert.equal(formatGhErrorDetail(body), 'Validation Failed · Search.q missing');
+  });
+  it('无权搜仓:拼上 errors[].message,不再只剩 Validation Failed', () => {
+    const body = {
+      message: 'Validation Failed',
+      errors: [{
+        message: 'The listed users and repositories cannot be searched either because the resources do not exist or you do not have permission to view them.',
+        resource: 'Search', field: 'q', code: 'invalid',
+      }],
+    };
+    const s = formatGhErrorDetail(body);
+    assert.match(s, /Validation Failed/);
+    assert.match(s, /cannot be searched/);
+    assert.ok(s.length > 'Validation Failed'.length);
+  });
+  it('非对象 → 空串', () => {
+    assert.equal(formatGhErrorDetail(null), '');
+    assert.equal(formatGhErrorDetail('oops'), '');
+  });
+});
+
+describe('REST 列表 URL 与过滤', () => {
+  it('isRestIssuesListUrl 认仓库列表,不认 Search 或单条', () => {
+    assert.equal(isRestIssuesListUrl('/repos/o/r/issues?state=open'), true);
+    assert.equal(isRestIssuesListUrl('https://api.github.com/repositories/99/issues?page=2'), true);
+    assert.equal(isRestIssuesListUrl('/search/issues?q=repo:o/r'), false);
+    assert.equal(isRestIssuesListUrl('/repos/o/r/issues/12'), false);
+  });
+  it('isRestPullsListUrl 认仓库列表,不认单条', () => {
+    assert.equal(isRestPullsListUrl('/repos/o/r/pulls'), true);
+    assert.equal(isRestPullsListUrl('https://api.github.com/repositories/1/pulls?page=2'), true);
+    assert.equal(isRestPullsListUrl('/repos/o/r/pulls/3'), false);
+  });
+  it('excludePullsFromIssueList 去掉带 pull_request 的项', () => {
+    const items = [
+      { number: 1, title: 'issue' },
+      { number: 2, title: 'pr', pull_request: { url: 'https://api.github.com/repos/o/r/pulls/2' } },
+    ];
+    assert.deepEqual(excludePullsFromIssueList(items).map((x) => x.number), [1]);
+  });
+  it('filterPullsByMerged 拆 closed / merged', () => {
+    const items = [
+      { number: 1, merged_at: '2026-01-01T00:00:00Z' },
+      { number: 2, merged_at: null },
+      { number: 3 },
+    ];
+    assert.deepEqual(filterPullsByMerged(items, true).map((x) => x.number), [1]);
+    assert.deepEqual(filterPullsByMerged(items, false).map((x) => x.number), [2, 3]);
   });
 });

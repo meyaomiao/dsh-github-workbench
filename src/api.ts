@@ -3,7 +3,11 @@
  * Bearer PAT 鉴权、限流/错误归一为中文可操作提示,全部端点类型化。
  */
 
-import { qs, decodeBase64Utf8, parseLinkNext, parseGithubUrl, chunkRepoQualifiers, type GhRef, ghRefKey } from './lib.ts';
+import {
+  qs, decodeBase64Utf8, parseLinkNext, parseGithubUrl, chunkRepoQualifiers, type GhRef, ghRefKey,
+  formatGhErrorDetail, isRestIssuesListUrl, isRestPullsListUrl,
+  excludePullsFromIssueList, filterPullsByMerged,
+} from './lib.ts';
 
 const API = 'https://api.github.com';
 const TOKEN_KEY = 'gw.token';
@@ -73,7 +77,7 @@ async function ghRequest(path: string, opts: GhOpts = {}): Promise<GhResponse> {
   }
 
   let upstream = '';
-  try { upstream = (await res.json() as { message?: string }).message ?? ''; } catch { /* 忽略 */ }
+  try { upstream = formatGhErrorDetail(await res.json()); } catch { /* 忽略 */ }
   if (res.status === 401) throw new GhError('Token 无效或已过期(HTTP 401)。请在 ⚙ 设置里检查 Personal Access Token。', 401);
   if (res.status === 403) {
     const isSearch = resource === 'search' || /\/search\//.test(path);
@@ -269,16 +273,61 @@ async function searchPage(q: string, sort: ListSort, pageUrl?: string): Promise<
   return { items, nextUrl, totalCount: total };
 }
 
-/** Issues 列表:Search API `is:issue`,不被 PR 占坑;默认按创建时间(网页 Newest)。 */
+function restSort(sort: ListSort): { sort: string; direction: string } {
+  return { sort: sort === 'updated' ? 'updated' : 'created', direction: 'desc' };
+}
+
+/** Search 422 时的仓库 Issues 列表(会混 PR,调用方再滤)。 */
+async function listIssuesRest(
+  ref: GhRef,
+  state: IssueState,
+  sort: ListSort,
+  pageUrl?: string,
+): Promise<ListPage<GhIssue>> {
+  const path = pageUrl && isRestIssuesListUrl(pageUrl)
+    ? pageUrl
+    : `/repos/${ghRefKey(ref)}/issues${qs({ state, per_page: PAGE, ...restSort(sort) })}`;
+  const { data, nextUrl } = await ghList<GhIssue[]>(path);
+  const items = excludePullsFromIssueList(data);
+  return { items, nextUrl, totalCount: null };
+}
+
+/** Search 422 时的仓库 PR 列表;closed/merged 在 closed 结果上按 merged_at 滤。 */
+async function listPullsRest(
+  ref: GhRef,
+  filter: PullFilter,
+  sort: ListSort,
+  pageUrl?: string,
+): Promise<ListPage<GhPull>> {
+  const state = filter === 'open' ? 'open' : 'closed';
+  const path = pageUrl && isRestPullsListUrl(pageUrl)
+    ? pageUrl
+    : `/repos/${ghRefKey(ref)}/pulls${qs({ state, per_page: PAGE, ...restSort(sort) })}`;
+  const { data, nextUrl } = await ghList<GhPull[]>(path);
+  const items = filter === 'open' ? data : filterPullsByMerged(data, filter === 'merged');
+  return { items, nextUrl, totalCount: null };
+}
+
+function isSearchValidation(e: unknown): boolean {
+  return e instanceof GhError && e.status === 422;
+}
+
+/** Issues 列表:Search API `is:issue`,不被 PR 占坑;默认按创建时间(网页 Newest)。Search 422 回退 REST。 */
 export async function listIssues(
   ref: GhRef,
   state: IssueState = 'open',
   sort: ListSort = 'created',
   pageUrl?: string,
 ): Promise<ListPage<GhIssue>> {
+  if (pageUrl && isRestIssuesListUrl(pageUrl)) return listIssuesRest(ref, state, sort, pageUrl);
   const q = searchQ([`repo:${ghRefKey(ref)}`, 'is:issue', `is:${state}`]);
-  const page = await searchPage(q, sort, pageUrl);
-  return { items: page.items.map(searchIssueToGh), nextUrl: page.nextUrl, totalCount: page.totalCount };
+  try {
+    const page = await searchPage(q, sort, pageUrl);
+    return { items: page.items.map(searchIssueToGh), nextUrl: page.nextUrl, totalCount: page.totalCount };
+  } catch (e) {
+    if (!isSearchValidation(e) || pageUrl) throw e;
+    return listIssuesRest(ref, state, sort);
+  }
 }
 
 export async function getIssue(ref: GhRef, n: number): Promise<GhIssue> {
@@ -295,17 +344,23 @@ export async function listComments(ref: GhRef, n: number, pageUrl?: string): Pro
   return { items: data, nextUrl: data.length === 0 ? null : (nextUrl ?? computed), totalCount: null };
 }
 
-/** PR 列表:Search `is:pr`(+ is:unmerged / is:merged),closed 与 merged 分开;默认 Newest。 */
+/** PR 列表:Search `is:pr`(+ is:unmerged / is:merged),closed 与 merged 分开;默认 Newest。Search 422 回退 REST。 */
 export async function listPulls(
   ref: GhRef,
   filter: PullFilter = 'open',
   sort: ListSort = 'created',
   pageUrl?: string,
 ): Promise<ListPage<GhPull>> {
+  if (pageUrl && isRestPullsListUrl(pageUrl)) return listPullsRest(ref, filter, sort, pageUrl);
   const extra = filter === 'merged' ? 'is:merged' : filter === 'closed' ? 'is:closed is:unmerged' : 'is:open';
   const q = searchQ([`repo:${ghRefKey(ref)}`, 'is:pr', extra]);
-  const page = await searchPage(q, sort, pageUrl);
-  return { items: page.items.map(searchIssueToPull), nextUrl: page.nextUrl, totalCount: page.totalCount };
+  try {
+    const page = await searchPage(q, sort, pageUrl);
+    return { items: page.items.map(searchIssueToPull), nextUrl: page.nextUrl, totalCount: page.totalCount };
+  } catch (e) {
+    if (!isSearchValidation(e) || pageUrl) throw e;
+    return listPullsRest(ref, filter, sort);
+  }
 }
 
 export async function getPull(ref: GhRef, n: number): Promise<GhPull> {
