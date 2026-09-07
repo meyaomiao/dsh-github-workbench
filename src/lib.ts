@@ -59,6 +59,72 @@ export function parseLinkNext(link: string | null | undefined): string | null {
   return null;
 }
 
+/** GitHub 错误 JSON:`message` + `errors[]` 拼成一行(422 的细节在 errors 里)。 */
+export function formatGhErrorDetail(body: unknown): string {
+  if (!body || typeof body !== 'object') return '';
+  const b = body as {
+    message?: unknown;
+    errors?: unknown;
+  };
+  const parts: string[] = [];
+  if (typeof b.message === 'string' && b.message.trim()) parts.push(b.message.trim());
+  if (Array.isArray(b.errors)) {
+    for (const raw of b.errors) {
+      if (!raw || typeof raw !== 'object') continue;
+      const e = raw as { message?: unknown; resource?: unknown; field?: unknown; code?: unknown };
+      if (typeof e.message === 'string' && e.message.trim()) {
+        parts.push(e.message.trim());
+        continue;
+      }
+      const loc = [e.resource, e.field].filter((x) => typeof x === 'string' && x).join('.');
+      const code = typeof e.code === 'string' && e.code ? e.code : '';
+      const bit = [loc, code].filter(Boolean).join(' ');
+      if (bit) parts.push(bit);
+    }
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out.join(' · ');
+}
+
+/** 仓库 Issues 列表 URL(含 GitHub Link 里的 /repositories/{id}/issues),不含 /issues/123。 */
+export function isRestIssuesListUrl(url: string): boolean {
+  try {
+    const p = new URL(url, 'https://api.github.com').pathname.replace(/\/$/, '');
+    return /\/(repos|repositories)\/.+\/issues$/.test(p);
+  } catch {
+    return false;
+  }
+}
+
+/** 仓库 Pulls 列表 URL(含 /repositories/{id}/pulls),不含 /pulls/123。 */
+export function isRestPullsListUrl(url: string): boolean {
+  try {
+    const p = new URL(url, 'https://api.github.com').pathname.replace(/\/$/, '');
+    return /\/(repos|repositories)\/.+\/pulls$/.test(p);
+  } catch {
+    return false;
+  }
+}
+
+/** REST /issues 会混进 PR,列表页只要真正的 Issue。 */
+export function excludePullsFromIssueList<T extends { pull_request?: unknown }>(items: readonly T[]): T[] {
+  return items.filter((it) => it.pull_request == null);
+}
+
+/** REST /pulls?state=closed 混着已合并;merged 页只要 merged_at,closed 页只要未合并。 */
+export function filterPullsByMerged<T extends { merged_at?: string | null }>(
+  items: readonly T[],
+  wantMerged: boolean,
+): T[] {
+  return items.filter((p) => (wantMerged ? Boolean(p.merged_at) : !p.merged_at));
+}
+
 // ---------- git trees → 树 ----------
 
 export interface TreeItem {
