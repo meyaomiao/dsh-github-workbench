@@ -21,7 +21,7 @@ const name = 'github-workbench';
  * undefined,mountWorkbench 自动走独立面板形态(官方 optional-peer 语义)。
  * slots ⇒ 官方原生右侧栏座位(sidebar.right.pane.tab)注册授权。
  */
-const inject = ['betterSidebar', 'slots'];
+const inject = ['slots'];
 
 /** 客户端插件体。 */
 export function apply(ctx: ClientCtx): void {

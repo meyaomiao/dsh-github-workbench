@@ -103,7 +103,7 @@ dsh plugin --profile web add .
 
 - **页签宿主迁移**:DSH 0.1.5+ 上优先注册官方原生右侧栏(`ctx.sidebarRightTabs` + `sidebar.right.pane.tab` 座位),better-sidebar 降级为旧宿主回退,独立面板兜底不变;双向互斥仲裁,杜绝双入口
 - **未读数实时进原生标签**:原生 title 座位订阅 inbox store(等价旧形态的 badge + updateTab)
-- `dsh.client.inject` 增加 `slots`(官方座位注册授权)
+- `dsh.client.inject` 增加 `slots`(官方座位注册授权);`betterSidebar` 移出模块级 inject(0.1.5 宿主对「声明未提供」的模块不激活),legacy 访问改 try/catch 守卫——**DSH 0.1.2 + better-sidebar 宿主上的 legacy 页签形态退化为独立面板**,需旧形态请留在 0.2.x
 - **原生形态暂不覆盖**(旧宿主回退路径仍可用):urlTarget 接管聊天 GitHub 链接(better-sidebar 宿主特性)、声明式 settings 齿轮(better-sidebar 设置页特性)
 
 其他:

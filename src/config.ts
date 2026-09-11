@@ -96,9 +96,10 @@ export function savePanelWidth(w: number): void { lsSet(K.panelWidth, String(cla
  * 本地无 token 而宿主有 → 回填本地(一次性合并,之后以本地为准)。
  */
 export function absorbHostToken(ctx: ClientCtx): void {
-  const svc = (ctx as { betterSidebar?: SidebarRegistry & {
+  let svc: SidebarRegistry & {
     getSnapshot?: () => { prefs?: { pluginSettings?: Record<string, Record<string, unknown>> } };
-  } }).betterSidebar;
+  } | undefined;
+  try { svc = (ctx as { betterSidebar?: typeof svc }).betterSidebar; } catch { svc = undefined; }
   try {
     const blob = svc?.getSnapshot?.().prefs?.pluginSettings?.['github-workbench:repo'];
     const hostToken = typeof blob?.token === 'string' ? blob.token : '';
