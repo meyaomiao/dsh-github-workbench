@@ -10,6 +10,19 @@ import type { ReactNode } from 'react';
 export interface ClientCtx {
   /** 注册 fiber 级清理钩子(卸载/HMR 时自动调用返回的 disposer)。 */
   effect(fn: () => (() => void) | void, label?: string): void;
+  /**
+   * 运行时服务等待(cordis Context 方法,非服务属性):声明依赖并在其
+   * 就绪时执行回调。DSH 0.1.5+ 用于等待官方原生右侧栏服务。
+   */
+  inject?(
+    deps: readonly string[],
+    fn: (ctx: { get(name: string): unknown }) => (() => void) | void,
+  ): { dispose?: () => void };
+  /** 官方座位系统(DSH web client 核心服务;原生右侧栏内容体注册需要)。 */
+  slots?: {
+    inject(name: string, fn: () => (() => void) | void): () => void;
+    register(spec: Record<string, unknown>, component: unknown): () => void;
+  };
 }
 
 /** better-sidebar 注册表的本地最小契约(registerTab + 可选 badge 刷新)。 */

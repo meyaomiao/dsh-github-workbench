@@ -9,7 +9,7 @@
  * 则自动卸载面板切换为 tab(收敛保证,杜绝双挂载)。
  */
 
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ClientCtx, SidebarRegistry, TabDescriptorLike } from './types.ts';
 import { iconFor } from './icons.ts';
@@ -31,16 +31,89 @@ function lookup(ctx: ClientCtx): SidebarRegistry | undefined {
 export function mountWorkbench(ctx: ClientCtx): () => void {
   ensureStyles();
   const stopInbox = getInboxStore().start();
-  const immediate = lookup(ctx);
-  if (immediate) {
-    const disposeTab = mountAsTab(ctx, immediate);
-    return () => { stopInbox(); disposeTab(); };
-  }
 
+  /** 挂载状态(声明先于形态〇:seat 回调可能同步触发,避免 TDZ)。 */
   let tabDisposer: (() => void) | null = null;
   let standaloneDisposer: (() => void) | null = null;
   let settled = false; // 已收敛到最终形态?
   const started = Date.now();
+
+  // ---------- 形态〇:官方原生右侧栏(DSH 0.1.5+,最高优先) ----------
+  // 参照 better-sidebar 0.19 native/index.ts:座位声明早于服务 provide,
+  // 必须等 sidebarRightTabs 服务本身,不能靠声明触发。
+  let nativeDisposer: (() => void) | null = null;
+  let seatDisposer: (() => void) | undefined;
+  if (typeof ctx.inject === 'function') {
+    try {
+      const seat = ctx.inject(['sidebarRightTabs', 'sidebarRight'], (injected) => {
+        const tabs = injected.get('sidebarRightTabs') as
+          | {
+            register(definition: {
+              id: string; kind: string;
+              priority?: 'extension' | 'builtin' | 'fallback';
+              title: (address: string) => string;
+              guide?: readonly { order: number; title: () => string; icon?: unknown }[];
+            }): () => void;
+          }
+          | undefined;
+        if (tabs === undefined || typeof tabs.register !== 'function') return;
+
+        // 双入口仲裁:native 后到时,收掉可能已挂的 betterSidebar 页签 /
+        // 独立面板(收敛保证,杜绝双挂载)。
+        try { tabDisposer?.(); tabDisposer = null; } catch { /* 已清理 */ }
+        try { standaloneDisposer?.(); standaloneDisposer = null; } catch { /* 已清理 */ }
+        settled = true;
+
+        const disposeType = tabs.register({
+          id: 'dsh-github-workbench',
+          kind: 'github-workbench',
+          priority: 'extension',
+          title: () => inboxTitle(),
+          guide: [{
+            order: 55,
+            title: () => 'GitHub 工作台',
+            icon: (props: { size?: number }) => iconFor('octo')(props.size ?? 16),
+          }],
+        });
+
+        const slots = ctx.slots;
+        const disposeSlots: (() => void)[] = [];
+        if (slots !== undefined) {
+          disposeSlots.push(
+            slots.inject('sidebar.right.pane.tab', () => slots.register({
+              name: 'sidebar.right.pane.tab',
+              key: 'dsh-github-workbench',
+              inject: (sessionId: string) => ({ sessionId }),
+            }, NativeBody)),
+            slots.inject('sidebar.right.pane.tab.title', () => slots.register({
+              name: 'sidebar.right.pane.tab.title',
+              key: 'dsh-github-workbench',
+              inject: () => ({}),
+            }, NativeTitle)),
+          );
+        } else {
+          console.warn('[github-workbench] ctx.slots 不可用,原生内容体未注册');
+        }
+
+        nativeDisposer = (): void => {
+          for (const dispose of disposeSlots.reverse()) dispose();
+          disposeType();
+          nativeDisposer = null;
+        };
+        return nativeDisposer;
+      });
+      seatDisposer = typeof seat?.dispose === 'function' ? () => seat.dispose?.() : undefined;
+    } catch (error) {
+      console.warn('[github-workbench] 原生右侧栏等待启动失败:', error);
+    }
+  }
+
+  const immediate = nativeDisposer === null ? lookup(ctx) : undefined;
+  if (immediate) {
+    const disposeTab = mountAsTab(ctx, immediate);
+    return () => { stopInbox(); disposeTab(); seatDisposer?.(); };
+  }
+
 
   // 运行时诊断探针(临时):暴露挂载决策的每一环,便于远程定位
   const dbg = (window as unknown as { __GW_DEBUG__?: Record<string, unknown> });
@@ -72,7 +145,8 @@ export function mountWorkbench(ctx: ClientCtx): () => void {
     d.ticks = (d.ticks as number) + 1;
     d.marker = typeof document !== 'undefined' && !!document.querySelector('[data-dsh-better-sidebar]');
     // ① 服务就绪 → 官方 tab 路径(最高优先;若此前误挂独立面板则先撤再切)
-    const reg = probeLookup();
+    //    原生右侧栏已激活 ⇒ 本形态让位(防双入口)
+    const reg = nativeDisposer === null ? probeLookup() : undefined;
     if (reg) {
       clearInterval(timer);
       if (standaloneDisposer) {
@@ -90,15 +164,15 @@ export function mountWorkbench(ctx: ClientCtx): () => void {
     // ② 侧边栏环境 ⇒ 继续等服务(防御上限 60s),永不降级
     if (d.marker) return;
 
-    // ③ 确认非侧边栏环境且超过宽限期 ⇒ 独立面板兜底
-    if (Date.now() - started > 5_000) {
+    // ③ 确认非侧边栏环境且超过宽限期 ⇒ 独立面板兜底(原生栏已激活则永不)
+    if (Date.now() - started > 5_000 && nativeDisposer === null) {
       clearInterval(timer);
       standaloneDisposer = mountStandalone();
       settled = true;
       d.settled = 'standalone';
       // 兜底后低频守望:better-sidebar 若之后才就绪,自动切换为 tab
       const lateCheck = setInterval(() => {
-        const lateReg = lookup(ctx);
+        const lateReg = nativeDisposer === null ? lookup(ctx) : undefined;
         if (lateReg && standaloneDisposer) {
           clearInterval(lateCheck);
           console.info('[github-workbench] 独立面板运行中检测到 betterSidebar,自动切换为侧边栏页签');
@@ -117,12 +191,29 @@ export function mountWorkbench(ctx: ClientCtx): () => void {
     stopInbox();
     tabDisposer?.();
     standaloneDisposer?.();
+    nativeDisposer?.();
+    seatDisposer?.();
   };
 }
 
 function inboxTitle(): string {
   const n = getInboxStore().unreadCount();
   return n > 0 ? `GitHub 工作台 (${n})` : 'GitHub 工作台';
+}
+
+/** 原生座位的内容体:框架注入 sessionId(会话作用域);恒可见。 */
+function NativeBody(props: { sessionId?: string }): React.ReactNode {
+  return createElement(WorkbenchApp, {
+    sessionId: props.sessionId ?? '',
+    visible: true,
+  });
+}
+
+/** 原生座位的标签标题:订阅 inbox store,未读数实时进标题。 */
+function NativeTitle(): React.ReactNode {
+  const [title, setTitle] = useState(inboxTitle());
+  useEffect(() => getInboxStore().subscribe(() => setTitle(inboxTitle())), []);
+  return title;
 }
 
 function bindInboxBadge(registry: SidebarRegistry): () => void {

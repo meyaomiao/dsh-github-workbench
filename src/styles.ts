@@ -11,7 +11,9 @@
 
 export const GW_CSS = `
 .gw-root{position:relative;width:100%;height:100%;min-height:0;display:flex;flex-direction:column;min-width:280px;
-  background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);
+  /* 透明根:官方面板/better-sidebar 页签/独立面板各自提供底色,
+     组件不再自刷背景(避免遮住宿主 0.1.5 新调色板)。 */
+  background:transparent;color:var(--dsw-alias-label-primary);
   font-size:var(--gw-body-size, 12px);line-height:1.5;
   container-type:inline-size}
 .gw-root *,.gw-root *::before,.gw-root *::after{box-sizing:border-box}

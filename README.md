@@ -13,9 +13,26 @@
 
 *人在面板里亲自点按钮 = 天然的人类审批,无需任何额外审批链。*
 
-**0.2.6** 新增收件箱:头部托盘看公开仓新建 Issue / PR,以及最近仓的 Actions;点行跳到对应页签,可返回进箱前的仓库。
+**0.3.x** 页签优先注册 DSH 官方原生右侧栏。
 
 </div>
+
+## ⭐ 欢迎点星收藏
+
+如果 GitHub 工作台帮到了你，欢迎到 [GitHub 仓库](https://github.com/meyaomiao/dsh-github-workbench) 点个 Star ⭐，让更多 DSH 用户看到它。问题与建议请提 Issue。
+
+## 📋 兼容性
+
+| 插件版本 | 状态 | 对应 DSH |
+|---|---|---|
+| **0.3.x**（当前主线） | ✅ | **0.1.5-rc.1 / 0.1.5-rc.2**（及之后的 0.1.5 线；页签走官方原生右侧栏） |
+| 0.2.x | 🔧 维护态（仅修 bug） | DSH ≤ 0.1.2-rc.1（仍兼容 0.1.1-rc.2 / 0.1.2-alpha.4；better-sidebar 页签或独立面板） |
+
+### 本次升级功能变化
+
+- **页签宿主迁移**：DSH 0.1.5+ 优先注册官方原生右侧栏（`ctx.sidebarRightTabs`），better-sidebar 降为旧宿主回退，独立面板兜底不变。
+- **官方已有的交给官方**：不画赞踩、不画交付文件卡；聊天里的 GitHub 链接接管仍依赖旧宿主，原生形态暂不覆盖。
+- 0.3.x 在 DSH 0.1.2 + better-sidebar 上 **页签会退化成独立面板**；要旧页签请留在 0.2.x。
 
 ---
 
@@ -91,12 +108,6 @@ dsh plugin --profile web add .
 - 消费 [`ctx.betterSidebar`](https://github.com/omdsh-dev/DSH-better-sidebar/blob/main/docs/external-plugin-guide.md):`inject=['betterSidebar']`(cordis 访问授权)+ `package.json dsh.client.inject` 声明 bundle 依赖 `dsh-better-sidebar`(loader 加载顺序)——**两层缺一不可**,否则服务访问被代理拒绝或模块被跳过(踩坑实录见源码注释)
 - 根节点流式撑满 TabContent(不用 absolute inset:0,避免逃逸覆盖侧边栏框架)
 - 容器查询三档自适应(<600 抽屉态 / ≥720 / ≥1000);`visible=false` 时暂停轮询省配额
-
-## 📋 兼容性
-
-- DeepSeek Harness `0.1.2-rc.1`（仍兼容 `0.1.1-rc.2` 与 `0.1.2-alpha.4`，web profile）
-- DSH `0.1.2-alpha.1` 起已删除 `@deepseek-ai/dsh-client-runtime`;本包从 0.2.4 起不再把它写进 `dsh.client.inject`
-- 侧栏请用 `dsh-better-sidebar@0.18.0`（适配 0.1.2-rc.1）；0.16.x 不兼容 0.1.2 线
 
 ## 🛠 开发
 
