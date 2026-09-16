@@ -9,6 +9,7 @@ import { GwIcon } from './icons.ts';
 import * as api from './api.ts';
 import { timeAgo, type GhRef } from './lib.ts';
 import { errText, useUI } from './workbench.tsx';
+import { t } from './locales.ts';
 
 export function CommentsBlock(props: {
   ghRef: GhRef; number: number;
@@ -25,13 +26,13 @@ export function CommentsBlock(props: {
 
   async function del(c: api.GhComment): Promise<void> {
     if (!(await ui.confirm({
-      title: '删除这条评论?',
+      title: t('comments.deleteConfirm'),
       body: c.body.slice(0, 120),
-      confirmText: '删除', danger: true,
+      confirmText: t('comments.deleteText'), danger: true,
     }))) return;
     try {
       await api.deleteComment(props.ghRef, c.id);
-      ui.toast('评论已删除');
+      ui.toast(t('comments.deleted'));
       props.onChanged();
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
@@ -42,7 +43,7 @@ export function CommentsBlock(props: {
     <div>
       <div className="gw-pop-divider" style={{ margin: '14px 0 4px' }} />
       <div className="gw-muted" style={{ fontSize: 11, marginBottom: 2 }}>
-        —— 评论 {props.comments.length}{props.nextUrl ? '+' : ''} ——
+        {t('comments.count', { count: props.comments.length, extra: props.nextUrl ? '+' : '' })}
       </div>
       {props.comments.map((c) => (
         <CommentRow key={c.id} comment={c} mine={viewer != null && c.user?.login === viewer}
@@ -51,7 +52,7 @@ export function CommentsBlock(props: {
       {props.nextUrl && props.onLoadMore && (
         <div className="gw-more">
           <button className="gw-btn" disabled={props.loadingMore} onClick={props.onLoadMore}>
-            {props.loadingMore ? '加载中…' : '加载更多评论'}
+            {props.loadingMore ? t('loading') : t('loadMoreComments')}
           </button>
         </div>
       )}
@@ -77,11 +78,11 @@ function CommentRow(props: {
             setBusy(true);
             try {
               await api.editComment(props.ghRef, props.comment.id, text);
-              ui.toast('评论已更新'); setEditing(false); props.onChanged();
+              ui.toast(t('comments.updated')); setEditing(false); props.onChanged();
             } catch (e) { ui.toast(errText(e), 'err'); }
             finally { setBusy(false); }
-          }}>保存</button>
-          <button className="gw-btn" onClick={() => { setEditing(false); setText(props.comment.body); }}>取消</button>
+          }}>{t('comments.save')}</button>
+          <button className="gw-btn" onClick={() => { setEditing(false); setText(props.comment.body); }}>{t('comments.cancel')}</button>
         </div>
       </div>
     );
@@ -94,10 +95,10 @@ function CommentRow(props: {
         <span>{timeAgo(props.comment.created_at)}</span>
         {props.mine && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4 }}>
-            <button className="gw-hbtn" title="编辑评论" onClick={() => setEditing(true)}>
+            <button className="gw-hbtn" title={t('comments.editTitle')} onClick={() => setEditing(true)}>
               <GwIcon name="pencil" size={12} />
             </button>
-            <button className="gw-hbtn" title="删除评论" onClick={props.onDelete}>
+            <button className="gw-hbtn" title={t('comments.deleteTitle')} onClick={props.onDelete}>
               <GwIcon name="trash" size={12} />
             </button>
           </span>
@@ -108,14 +109,14 @@ function CommentRow(props: {
   );
 }
 
-/** 底部发表框(受控于父级刷新回调)。 */
+/** Comment composer (bottom bar). */
 export function CommentComposer(props: { ghRef: GhRef; number: number; onDone: () => void }): ReactNode {
   const ui = useUI();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
 
   return (
-    <textarea className="gw-input gw-textarea" placeholder="写下评论…(Markdown)"
+    <textarea className="gw-input gw-textarea" placeholder={t('comments.writePlaceholder')}
       value={text} onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) {
@@ -130,7 +131,7 @@ export function CommentComposer(props: { ghRef: GhRef; number: number; onDone: (
     setBusy(true);
     try {
       await api.addComment(props.ghRef, props.number, text.trim());
-      ui.toast('评论已发表');
+      ui.toast(t('comments.posted'));
       setText('');
       props.onDone();
     } catch (e) { ui.toast(errText(e), 'err'); }

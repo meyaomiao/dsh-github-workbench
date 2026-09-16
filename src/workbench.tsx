@@ -18,6 +18,7 @@ import { ActionsView } from './actions-view.tsx';
 import { getInboxStore } from './inbox-store.ts';
 import type { InboxItem } from './inbox-store.ts';
 import { InboxOverlay, InboxReturnBar, useInboxSnapshot } from './inbox-view.tsx';
+import { t } from './locales.ts';
 
 // ---------- 跨视图 UI 能力(确认气泡 / toast) ----------
 
@@ -270,38 +271,38 @@ export function WorkbenchApp({ sessionId, visible, seedUrl }: WorkbenchAppProps)
     <div className="gw-header">
       <GwIcon name="octo" size={19} />
       <button className="gw-repo-btn" onClick={() => { setRepoPop((v) => !v); setSetPop(false); }}
-        title="切换代码库">
-        <span className="gw-repo-name">{repoFull || '选择仓库'}</span>
+        title={t('mount.standaloneTitle')}>
+        <span className="gw-repo-name">{repoFull || t('mount.standaloneTitle')}</span>
         <GwIcon name="chevron-down" size={12} style={{ color: 'var(--dsw-alias-label-tertiary)' }} />
       </button>
       {meta?.isPrivate && <span className="gw-chip"><GwIcon name="lock" size={9} />private</span>}
-      <select className="gw-select" value={effBranch} title="分支"
+      <select className="gw-select" value={effBranch} title={t('tab.code')}
         onChange={(e) => { setBranch(e.target.value); cfg.saveBranch(e.target.value); }}>
         {(branches.length ? branches : (meta ? [{ name: meta.defaultBranch }] : [])).map((b) => (
           <option key={b.name} value={b.name}>{b.name}</option>
         ))}
         {meta && !branches.some((b) => b.name === meta.defaultBranch) && <option value={meta.defaultBranch}>{meta.defaultBranch}</option>}
       </select>
-      <button className="gw-hbtn" title="在浏览器打开当前仓库"
+      <button className="gw-hbtn" title={t('file.openOnGitHub')}
         onClick={() => window.open(meta?.htmlUrl || `https://github.com/${repoFull}`, '_blank', 'noopener')}>
         <GwIcon name="external-link" size={14} />
       </button>
       <button className={`gw-hbtn${inboxSnap.unreadCount > 0 ? ' has-unread' : ''}`}
-        title={inboxSnap.unreadCount > 0 ? `收件箱 · ${inboxSnap.unreadCount} 未读` : '收件箱'}
+        title={inboxSnap.unreadCount > 0 ? t('inbox.unread', { count: inboxSnap.unreadCount }) : t('inbox.title')}
         onClick={openInbox}>
         <GwIcon name="inbox" size={14} />
         {inboxSnap.unreadCount > 0 && (
           <span className="gw-inbox-badge">{inboxSnap.unreadCount > 99 ? '99+' : inboxSnap.unreadCount}</span>
         )}
       </button>
-      <button className="gw-hbtn" title="刷新" onClick={() => setReload((n) => n + 1)}>
+      <button className="gw-hbtn" title={t('actions.refresh')} onClick={() => setReload((n) => n + 1)}>
         <GwIcon name="refresh" size={14} />
       </button>
-      <button className="gw-hbtn" title="设置(Token / 自动刷新)" onClick={() => { setSetPop((v) => !v); setRepoPop(false); }}>
+      <button className="gw-hbtn" title={t('mount.settingsAutoRefresh')} onClick={() => { setSetPop((v) => !v); setRepoPop(false); }}>
         <GwIcon name="gear" size={14} />
       </button>
       <span className={`gw-dot ${token ? 'ok' : ''}`}
-        title={token ? '已配置 PAT(5000 次/小时)' : '未配置 Token:匿名 60 次/小时且无法写操作'} />
+        title={token ? 'PAT' : 'Anonymous'} />
     </div>
   );
 
@@ -408,12 +409,12 @@ function SetupCard(props: { detecting: boolean; error: string | null; onSubmit: 
       <div style={{ maxWidth: 340, width: '100%' }}>
         <GwIcon name="octo" size={40} style={{ margin: '0 auto 14px', color: 'var(--dsw-alias-label-tertiary)' }} />
         <div style={{ marginBottom: 10, lineHeight: 1.7 }}>
-          {props.detecting ? '正在识别当前工作区的 GitHub 仓库…' : '输入要查看的仓库(owner/repo 或粘贴 URL)。'}
+          {props.detecting ? t('loadingTree') : 'owner/repo or paste a GitHub URL'}
         </div>
         <form className="gw-formrow" onSubmit={(e) => { e.preventDefault(); props.onSubmit(value); }}>
           <input className="gw-input" placeholder="owner/repo" value={value}
             onChange={(e) => setValue(e.target.value)} autoFocus />
-          <button className="gw-btn primary" type="submit">载入</button>
+          <button className="gw-btn primary" type="submit">{t('confirm.yes')}</button>
         </form>
         {props.error && <div className="gw-errbox">{props.error}</div>}
       </div>
@@ -506,14 +507,14 @@ function RepoPopover(props: {
         {!manage ? (
           <>
             <form className="gw-formrow" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-              <input className="gw-input" placeholder={props.hasToken ? '过滤我的仓库 / 搜索公开仓库 / owner/repo' : 'owner/repo 或粘贴仓库 URL'}
+              <input className="gw-input" placeholder={props.hasToken ? 'Filter repos / Search public / owner/repo' : 'owner/repo or paste a GitHub URL'}
                 value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
-              <button className="gw-btn primary" type="submit">切换</button>
+              <button className="gw-btn primary" type="submit">{t('confirm.yes')}</button>
             </form>
 
             {props.recent.length > 0 && (
               <>
-                <div className="gw-pop-title" style={{ paddingTop: 8 }}>最近使用</div>
+                <div className="gw-pop-title" style={{ paddingTop: 8 }}>Recent</div>
                 {recent.map((full) => {
                   const owner = full.split('/')[0];
                   const droppable = viewer === null || owner !== viewer;
@@ -521,9 +522,9 @@ function RepoPopover(props: {
                     <button key={`r:${full}`} className={`gw-pop-item ${full === props.current ? 'cur' : ''}`}
                       onClick={() => props.onPick(full)}>
                       <span className="gw-dot" />{full}
-                      {full === props.current && <span className="gw-pop-cur">当前</span>}
+                      {full === props.current && <span className="gw-pop-cur">{t('issues.open')}</span>}
                       {droppable && (
-                        <span className="gw-x" title="移除(他人的仓同时加入隐藏名单)"
+                        <span className="gw-x" title="Remove"
                           onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => dropFromRecent(e as unknown as React.MouseEvent, full)}>
                           <GwIcon name="trash" size={10} />
@@ -538,9 +539,9 @@ function RepoPopover(props: {
             {props.hasToken && (
               <>
                 <div className="gw-pop-title" style={{ paddingTop: 8 }}>
-                  有权限的仓库 · 可见 {visibleMine.length}/{mineAll.length}
+                  Repos · {visibleMine.length}/{mineAll.length}
                 </div>
-                {!repos && !loadErr && <div className="gw-pop-hint">拉取列表…</div>}
+                {!repos && !loadErr && <div className="gw-pop-hint">{t('loading')}</div>}
                 {mineFiltered.map((r) => (
                   <button key={r.fullName} className={`gw-pop-item ${r.fullName === props.current ? 'cur' : ''}`}
                     onClick={() => props.onPick(r.fullName)} title={r.description ?? r.fullName}>
@@ -549,7 +550,7 @@ function RepoPopover(props: {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.fullName}</span>
                     <span className="gw-meta" style={{ marginLeft: 'auto', paddingLeft: 8 }}>{timeAgo(r.pushedAt)}</span>
                     {canDrop(r) && (
-                      <span className="gw-x" title="从列表移除(不影响 GitHub)"
+                      <span className="gw-x" title="Remove from list"
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => dropRepo(e as unknown as React.MouseEvent, r.fullName)}>
                         <GwIcon name="trash" size={10} />
@@ -559,22 +560,22 @@ function RepoPopover(props: {
                 ))}
                 {hidden.length > 0 && (
                   <div className="gw-pop-hint" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>已隐藏 {hidden.length} 个非本人仓库</span>
-                    <button className="gw-btn" style={{ padding: '1px 8px' }} onClick={() => setManage(true)}>管理</button>
+                    <span>Hidden: {hidden.length}</span>
+                    <button className="gw-btn" style={{ padding: '1px 8px' }} onClick={() => setManage(true)}>Manage</button>
                   </div>
                 )}
               </>
             )}
             {loadErr && <div className="gw-errbox">{loadErr}</div>}
             {!props.hasToken && (
-              <div className="gw-pop-hint">💡 在 ⚙ 填 Token 后自动列出你有权限的仓库。</div>
+              <div className="gw-pop-hint">Enter a PAT in Settings to list your repos.</div>
             )}
 
             {(q.length >= 3 || searching) && !manage && (
               <>
-                <div className="gw-pop-title" style={{ paddingTop: 8 }}>公开仓库搜索「{q}」</div>
-                {searching && <div className="gw-pop-hint">搜索中…</div>}
-                {!searching && pub && pub.length === 0 && <div className="gw-pop-hint">无结果。</div>}
+                <div className="gw-pop-title" style={{ paddingTop: 8 }}>Search "{q}"</div>
+                {searching && <div className="gw-pop-hint">{t('loading')}</div>}
+                {!searching && pub && pub.length === 0 && <div className="gw-pop-hint">No results.</div>}
                 {(pub ?? []).map((r) => (
                   <button key={`p:${r.fullName}`} className="gw-pop-item"
                     onClick={() => props.onPick(r.fullName)} title={r.description ?? r.fullName}>
@@ -583,24 +584,24 @@ function RepoPopover(props: {
                     <span className="gw-meta" style={{ marginLeft: 'auto', paddingLeft: 8 }}>⭐ {r.stars}</span>
                   </button>
                 ))}
-                <div className="gw-pop-hint">提示:回车按输入内容解析为 owner/repo。</div>
+                <div className="gw-pop-hint">Press Enter to parse as owner/repo.</div>
               </>
             )}
           </>
         ) : (
           <>
-            <div className="gw-pop-title">已隐藏的仓库({hidden.length})—— 仅从本列表移除,不影响 GitHub</div>
+            <div className="gw-pop-title">Hidden repos ({hidden.length})</div>
             <div style={{ maxHeight: 240, overflow: 'auto' }}>
               {hidden.map((full) => (
                 <button key={full} className="gw-pop-item" onClick={() => { cfg.unhideRepo(full); setHidden(cfg.loadHiddenRepos()); }}>
                   <GwIcon name="plus" size={10} />{full}
-                  <span className="gw-pop-cur">恢复</span>
+                  <span className="gw-pop-cur">Restore</span>
                 </button>
               ))}
-              {hidden.length === 0 && <div className="gw-pop-hint">空。</div>}
+              {hidden.length === 0 && <div className="gw-pop-hint">Empty.</div>}
             </div>
             <div className="gw-formrow" style={{ justifyContent: 'flex-end', paddingTop: 6 }}>
-              <button className="gw-btn" onClick={() => setManage(false)}>返回列表</button>
+              <button className="gw-btn" onClick={() => setManage(false)}>{t('issues.backToList')}</button>
             </div>
           </>
         )}
@@ -630,24 +631,23 @@ function SettingsPopover(props: {
   return (
     <div ref={wrap} style={{ position: 'absolute', inset: 0, zIndex: 50 }}>
       <div className="gw-pop right" style={{ top: 44, position: 'absolute' }}>
-        <div className="gw-pop-title">GitHub 访问令牌(Personal Access Token)</div>
+        <div className="gw-pop-title">GitHub Personal Access Token</div>
         <div className="gw-field">
-          <input className="gw-input" type="password" placeholder="ghp_… / github_pat_…(留空 = 匿名只读)"
+          <input className="gw-input" type="password" placeholder="ghp_… / github_pat_…"
             value={tok} onChange={(e) => setTok(e.target.value)} autoFocus />
         </div>
         <div className="gw-field">
-          <label>PR / Actions 自动刷新周期(秒,0 = 关闭)</label>
+          <label>{t('mount.settingsAutoRefresh')} (0 = off)</label>
           <input className="gw-input" type="number" min={0} max={120} value={autoSec}
             onChange={(e) => setAutoSec(Number(e.target.value) || 0)} />
         </div>
         <div className="gw-field">
-          <label>正文字号(Issue / PR 列表与详情)</label>
+          <label>Font size</label>
           <select className="gw-input" value={fontSel} onChange={(e) => setFontSel(e.target.value as cfg.FontSizePref)}
             style={{ appearance: 'auto', paddingRight: 8 }}>
-            <option value="dsh">跟随 DSH 侧边栏(12px,默认)</option>
-            <option value="13">13 px(紧凑)</option>
+            <option value="dsh">Follow DSH sidebar (12px)</option>
+            <option value="13">13 px</option>
             <option value="14">14 px</option>
-            <option value="14">14 px(大)</option>
           </select>
         </div>
         <div className="gw-formrow" style={{ justifyContent: 'flex-end', paddingTop: 6 }}>
@@ -656,18 +656,18 @@ function SettingsPopover(props: {
             cfg.saveAutoRefreshSec(autoSec);
             props.onSaveFontSize(fontSel);
             props.onClose();
-          }}>保存</button>
+          }}>{t('comments.save')}</button>
         </div>
         <div className="gw-pop-hint">
-          细粒度 Token 权限:Contents(R)、Issues(RW)、Pull requests(RW)、Actions(RW);
-          经典 Token 用 <code>repo</code>。仅保存在本浏览器,不经过任何服务端。
+          Fine-grained token scopes: Contents(R), Issues(RW), Pull requests(RW), Actions(RW);
+          Classic token: use <code>repo</code>. Stored locally only.
         </div>
       </div>
     </div>
   );
 }
 
-// ---------- 确认气泡 ----------
+// ---------- Confirm dialog ----------
 
 function ConfirmDialog(props: { opts: ConfirmOptions; onDone: (v: boolean) => void }): ReactNode {
   const { opts } = props;
@@ -677,10 +677,10 @@ function ConfirmDialog(props: { opts: ConfirmOptions; onDone: (v: boolean) => vo
         <h4>{opts.title}</h4>
         {opts.body && <p>{opts.body}</p>}
         <div className="gw-dialog-actions">
-          <button className="gw-btn" onClick={() => props.onDone(false)}>取消</button>
+          <button className="gw-btn" onClick={() => props.onDone(false)}>{t('confirm.no')}</button>
           <button className={`gw-btn ${opts.danger ? 'danger' : 'primary'}`} autoFocus
             onClick={() => props.onDone(true)}>
-            {opts.confirmText ?? '确认'}
+            {opts.confirmText ?? t('confirm.yes')}
           </button>
         </div>
       </div>

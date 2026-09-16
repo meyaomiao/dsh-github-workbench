@@ -137,21 +137,23 @@ export function parseGithubUrl(href: string): {
 
 // ---------- 格式化 ----------
 
-/** 中文相对时间(<1min → 刚刚;超一年 → 具体日期)。 */
+import { t } from './locales.ts';
+
+/** Relative time (<1min → just now; over a year → specific date). */
 export function timeAgo(iso: string, now: number = Date.now()): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diff = Math.max(0, now - t);
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diff = Math.max(0, now - ts);
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t('time.justNow');
+  if (min < 60) return t('time.minutesAgo', { n: min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
+  if (h < 24) return t('time.hoursAgo', { n: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d} 天前`;
+  if (d < 30) return t('time.daysAgo', { n: d });
   const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo} 个月前`;
-  return new Date(t).toISOString().slice(0, 10);
+  if (mo < 12) return t('time.monthsAgo', { n: mo });
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
 /** 运行时长(ms)。 */

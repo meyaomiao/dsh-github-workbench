@@ -12,6 +12,7 @@ import { getInboxStore } from './inbox-store.ts';
 import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentComposer, CommentsBlock } from './comments.tsx';
+import { t } from './locales.ts';
 
 export interface ListViewProps {
   ghRef: GhRef;
@@ -66,20 +67,20 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
         <span className="gw-open-count">{list
-          ? `${list.length}${total != null ? ` / ${total}` : ''} ${stateFilter === 'open' ? 'open' : 'closed'}`
+          ? `${list.length}${total != null ? ` / ${total}` : ''} ${stateFilter === 'open' ? t('issues.filterOpen') : t('issues.filterClosed')}`
           : '…'}</span>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <select className="gw-select" style={{ marginLeft: 0, maxWidth: 118 }}
-            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)} title="排序">
-            <option value="created">最新创建</option>
-            <option value="updated">最近更新</option>
+            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)}>
+            <option value="created">{t('issues.sortCreated')}</option>
+            <option value="updated">{t('issues.sortUpdated')}</option>
           </select>
           <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
-            onClick={() => setStateFilter('open')}>开放</button>
+            onClick={() => setStateFilter('open')}>{t('issues.filterOpen')}</button>
           <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
-            onClick={() => setStateFilter('closed')}>已关闭</button>
+            onClick={() => setStateFilter('closed')}>{t('issues.filterClosed')}</button>
           <button className="gw-btn primary" onClick={() => setShowNew(true)}>
-            <GwIcon name="plus" size={12} />新建 Issue
+            <GwIcon name="plus" size={12} />{t('issues.new')}
           </button>
         </span>
       </div>
@@ -87,8 +88,8 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
         {error && <ErrorBox msg={error} onRetry={() => reload()} />}
         {!error && !list && <Loading />}
         {list?.length === 0 && <Empty>{stateFilter === 'open'
-          ? <>没有打开的 Issue。<br />用上方按钮创建第一个。</>
-          : '没有已关闭的 Issue。'}</Empty>}
+          ? t('empty.noOpenIssues')
+          : t('empty.noClosedIssues')}</Empty>}
         {list?.map((it) => (
           <button key={it.number} className="gw-row" onClick={() => setDetail(it.number)}>
             <span className="gw-stateic"
@@ -98,7 +99,7 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
             <span className="gw-rowmain">
               <span className="gw-rowtitle">{it.title}</span>
               <span className="gw-rowsub">
-                #{it.number} · {timeAgo(it.updated_at)} 更新 · {it.user?.login ?? 'ghost'}
+                #{it.number} · {timeAgo(it.updated_at)} · {it.user?.login ?? 'ghost'}
                 {it.comments > 0 && <> · <GwIcon name="comment" size={10} /> {it.comments}</>}
                 {it.labels.map((l) => (
                   <span key={l.name} className="gw-label-chip"
@@ -108,19 +109,19 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
                 ))}
               </span>
             </span>
-            <span className="gw-meta">更新<br />{timeAgo(it.updated_at)}</span>
+            <span className="gw-meta">{t('issues.updated')}<br />{timeAgo(it.updated_at)}</span>
           </button>
         ))}
         {nextUrl && (
           <div className="gw-more">
             <button className="gw-btn" disabled={loadingMore} onClick={() => load(true, nextUrl)}>
-              {loadingMore ? '加载中…' : '加载更多'}
+              {loadingMore ? t('loading') : t('loadMore')}
             </button>
           </div>
         )}
         {!nextUrl && total != null && (list?.length ?? 0) >= 1000 && total > 1000 && (
           <div className="gw-muted" style={{ textAlign: 'center', padding: '8px 12px 14px' }}>
-            Search 最多展示 1000 条，其余请上 GitHub 网页
+            {t('search.limit')}
           </div>
         )}
       </div>
@@ -139,7 +140,7 @@ export function IssuesView({ ghRef, onCount, initialDetail, onConsumeDeep }: Lis
   );
 }
 
-// ---------- 新建 Issue ----------
+// ---------- New Issue ----------
 
 function NewIssueDrawer(props: { ghRef: GhRef; onClose: () => void; onCreated: (n: number) => void }): ReactNode {
   const ui = useUI();
@@ -151,36 +152,36 @@ function NewIssueDrawer(props: { ghRef: GhRef; onClose: () => void; onCreated: (
   return (
     <div className="gw-detail">
       <div className="gw-detail-head">
-        <button className="backbtn gw-btn" onClick={props.onClose}><GwIcon name="chevron-left" size={12} />返回列表</button>
-        <div style={{ fontWeight: 600, marginTop: 6 }}>新建 Issue</div>
+        <button className="backbtn gw-btn" onClick={props.onClose}><GwIcon name="chevron-left" size={12} />{t('issues.backToList')}</button>
+        <div style={{ fontWeight: 600, marginTop: 6 }}>{t('issues.newTitle')}</div>
       </div>
       <div className="gw-detail-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input className="gw-input" placeholder="标题(必填)" value={title}
+        <input className="gw-input" placeholder={t('issues.titlePlaceholder')} value={title}
           onChange={(e) => setTitle(e.target.value)} autoFocus />
-        <textarea className="gw-input gw-textarea" rows={7} placeholder="正文(Markdown)"
+        <textarea className="gw-input gw-textarea" rows={7} placeholder={t('issues.bodyPlaceholder')}
           value={body} onChange={(e) => setBody(e.target.value)} />
         {error && <div className="gw-errbox">{error}</div>}
       </div>
       <div className="gw-composer">
         <div className="gw-composer-row" style={{ justifyContent: 'flex-end' }}>
-          <button className="gw-btn" onClick={props.onClose}>取消</button>
+          <button className="gw-btn" onClick={props.onClose}>{t('confirm.no')}</button>
           <button className="gw-btn primary" disabled={!title.trim() || busy}
             onClick={() => {
               setBusy(true); setError(null);
               api.createIssue(props.ghRef, title.trim(), body)
-                .then((it) => { ui.toast(`Issue #${it.number} 已创建`);
+                .then((it) => { ui.toast(t('issues.created', { number: it.number }));
                   getInboxStore().markSelfCreated(inboxItemKey('issue', props.ghRef.owner, props.ghRef.repo, it.number));
                   props.onCreated(it.number); })
                 .catch((e) => { setError(errText(e)); })
                 .finally(() => setBusy(false));
-            }}>{busy ? '创建中…' : '创建'}</button>
+            }}>{busy ? t('issues.creating') : t('issues.create')}</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ---------- 详情抽屉 ----------
+// ---------- Issue detail drawer ----------
 
 function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; onChanged: () => void }): ReactNode {
   const ui = useUI();
@@ -211,13 +212,13 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
     if (!issue) return;
     const toClosed = !closed;
     if (toClosed && !(await ui.confirm({
-      title: `关闭 Issue #${issue.number}?`,
+      title: t('issues.closeConfirm', { number: issue.number }),
       body: issue.title,
-      confirmText: '关闭', danger: true,
+      confirmText: t('issues.closeText'), danger: true,
     }))) return;
     try {
       await api.patchIssue(props.ghRef, issue.number, { state: toClosed ? 'closed' : 'open' });
-      ui.toast(toClosed ? `Issue #${issue.number} 已关闭` : `Issue #${issue.number} 已重新打开`);
+      ui.toast(toClosed ? t('issues.closed', { number: issue.number }) : t('issues.reopened', { number: issue.number }));
       loadAll(); props.onChanged();
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
@@ -226,7 +227,7 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
     if (!issue) return;
     try {
       await api.patchIssue(props.ghRef, issue.number, { title: eTitle.trim(), body: eBody });
-      ui.toast('已保存'); setEditing(false); loadAll(); props.onChanged();
+      ui.toast(t('issues.saveSuccess')); setEditing(false); loadAll(); props.onChanged();
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
 
@@ -235,7 +236,7 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
       <div className="gw-detail" style={{ position: 'static', flex: 1 }}>
         <div className="gw-detail-head">
           <button className="gw-btn backbtn" onClick={props.onClose}>
-            <GwIcon name="chevron-left" size={12} />返回列表
+            <GwIcon name="chevron-left" size={12} />{t('issues.backToList')}
           </button>
           {issue ? (
             <>
@@ -243,14 +244,14 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
                 <StateIcon closed={issue.state === 'closed'} />{issue.title} <span className="gw-muted">#{issue.number}</span>
               </div>
               <div className="gw-rowsub" style={{ marginTop: 3 }}>
-                {issue.user?.login ?? 'ghost'} 创建于 {timeAgo(issue.created_at)} · {issue.state === 'closed' ? '已关闭' : '开放'}
+                {issue.user?.login ?? 'ghost'} {t('issues.createdAt')} {timeAgo(issue.created_at)} · {issue.state === 'closed' ? t('issues.closedLabel') : t('issues.open')}
                 <a className="gw-link" href={issue.html_url} target="_blank" rel="noreferrer"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                   <GwIcon name="external-link" size={10} />GitHub
                 </a>
               </div>
             </>
-          ) : <div className="gw-muted" style={{ marginTop: 8 }}>加载中…</div>}
+          ) : <div className="gw-muted" style={{ marginTop: 8 }}>{t('loading')}</div>}
         </div>
         <div className="gw-detail-body">
           {error && <ErrorBox msg={error} onRetry={loadAll} />}
@@ -261,15 +262,15 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
               <textarea className="gw-input gw-textarea" rows={8} value={eBody}
                 onChange={(e) => setEBody(e.target.value)} />
               <div className="gw-composer-row">
-                <button className="gw-btn primary" onClick={saveEdit}>保存修改</button>
+                <button className="gw-btn primary" onClick={saveEdit}>{t('issues.saveEdit')}</button>
                 <button className="gw-btn" onClick={() => {
                   setEditing(false); setETitle(issue.title); setEBody(issue.body ?? '');
-                }}>取消</button>
+                }}>{t('confirm.no')}</button>
               </div>
             </div>
           ) : (
             <>
-              {issue.body || '(无正文)'}
+              {issue.body || t('issues.noBody')}
               {issue.labels.length > 0 && (
                 <div style={{ marginTop: 10 }}>
                   {issue.labels.map((l) => (
@@ -302,10 +303,10 @@ function IssueDrawer(props: { ghRef: GhRef; number: number; onClose: () => void;
             <CommentComposer ghRef={props.ghRef} number={props.number} onDone={loadAll} />
             <div className="gw-composer-row">
               <button className={`gw-btn ${closed ? '' : 'danger'}`} onClick={toggleState}>
-                {closed ? '重新打开' : '关闭 Issue'}
+                {closed ? t('issues.reopenIssue') : t('issues.closeIssue')}
               </button>
               <button className="gw-btn" onClick={() => setEditing(true)}>
-                <GwIcon name="pencil" size={11} />编辑
+                <GwIcon name="pencil" size={11} />{t('issues.edit')}
               </button>
             </div>
           </div>

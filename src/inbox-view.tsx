@@ -8,6 +8,7 @@ import { GwIcon, type IconName } from './icons.ts';
 import { timeAgo, type InboxKind } from './lib.ts';
 import { Empty } from './ui.tsx';
 import type { InboxItem, InboxSnapshot, InboxStore } from './inbox-store.ts';
+import { t } from './locales.ts';
 
 export function useInboxSnapshot(store: InboxStore): InboxSnapshot {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -38,35 +39,35 @@ export function InboxOverlay(props: InboxOverlayProps): ReactNode {
       <div className="gw-inbox-bar">
         <button className="gw-btn backbtn" onClick={props.onReturn} type="button">
           <GwIcon name="chevron-left" size={12} />
-          {props.snapLabel ? `返回 ${props.snapLabel}` : '返回原仓页'}
+          {props.snapLabel ? t('inbox.backTo', { label: props.snapLabel }) : t('inbox.backToRepo')}
         </button>
-        <span className="gw-open-count">收件箱{unread > 0 ? ` · ${unread} 未读` : ''}</span>
+        <span className="gw-open-count">{t('inbox.title')}{unread > 0 ? t('inbox.unread', { count: unread }) : ''}</span>
         <button className="gw-btn" type="button" disabled={tabUnread === 0}
-          onClick={() => props.store.markAllRead(tab)}>本页已读</button>
+          onClick={() => props.store.markAllRead(tab)}>{t('inbox.markAllRead')}</button>
       </div>
       <div className="gw-tabs">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" className={`gw-tab ${tab === t.id ? 'on' : ''}`}
-            onClick={() => setTab(t.id)}>
-            <GwIcon name={t.icon} size={13} />{t.label}
-            {snap.unreadByKind[t.id] > 0 && <span className="gw-count">{snap.unreadByKind[t.id]}</span>}
+        {TABS.map((tabItem) => (
+          <button key={tabItem.id} type="button" className={`gw-tab ${tab === tabItem.id ? 'on' : ''}`}
+            onClick={() => setTab(tabItem.id)}>
+            <GwIcon name={tabItem.icon} size={13} />{tabItem.label}
+            {snap.unreadByKind[tabItem.id] > 0 && <span className="gw-count">{snap.unreadByKind[tabItem.id]}</span>}
           </button>
         ))}
       </div>
       {snap.truncatedWatch && tab !== 'actions' && (
         <div className="gw-pop-hint" style={{ padding: '6px 12px' }}>
-          Issues / PR 仅监视最近推送的最多 300 个公开仓。
+          {t('inbox.descIssuesPRs')}
         </div>
       )}
       {tab === 'actions' && (
         <div className="gw-pop-hint" style={{ padding: '6px 12px' }}>
-          Actions 只监视当前仓和最近使用的公开仓(最多 5 个)。
+          {t('inbox.descActions')}
         </div>
       )}
       {snap.lastError && <div className="gw-errbox">{snap.lastError}</div>}
       <div className="gw-list">
         {!snap.hasToken && (
-          <Empty>填 PAT 后监视你有权限的公开仓。</Empty>
+          <Empty>{t('empty.inboxNoPAT')}</Empty>
         )}
         {snap.hasToken && rows.length === 0 && !snap.lastError && (
           <Empty>{emptyCopy(tab)}</Empty>
@@ -90,16 +91,16 @@ export function InboxOverlay(props: InboxOverlayProps): ReactNode {
 }
 
 function emptyCopy(tab: InboxKind): string {
-  if (tab === 'pr') return '最近七天没有公开仓的新 Pull request。';
-  if (tab === 'actions') return '监视仓里最近没有新的 workflow 运行。';
-  return '最近七天没有公开仓的新 Issue。';
+  if (tab === 'pr') return t('empty.inboxNoPRs');
+  if (tab === 'actions') return t('empty.inboxNoActions');
+  return t('empty.inboxNoIssues');
 }
 
 export function InboxReturnBar(props: { label: string; onReturn: () => void }): ReactNode {
   return (
     <div className="gw-inbox-return">
       <button className="gw-btn backbtn" type="button" onClick={props.onReturn}>
-        <GwIcon name="chevron-left" size={12} />返回 {props.label}
+        <GwIcon name="chevron-left" size={12} />{t('inbox.backTo', { label: props.label })}
       </button>
     </div>
   );

@@ -4,6 +4,7 @@
  */
 
 import { qs, decodeBase64Utf8, parseLinkNext, parseGithubUrl, chunkRepoQualifiers, type GhRef, ghRefKey } from './lib.ts';
+import { t } from './locales.ts';
 
 const API = 'https://api.github.com';
 const TOKEN_KEY = 'gw.token';
@@ -74,19 +75,17 @@ async function ghRequest(path: string, opts: GhOpts = {}): Promise<GhResponse> {
 
   let upstream = '';
   try { upstream = (await res.json() as { message?: string }).message ?? ''; } catch { /* 忽略 */ }
-  if (res.status === 401) throw new GhError('Token 无效或已过期(HTTP 401)。请在 ⚙ 设置里检查 Personal Access Token。', 401);
+  if (res.status === 401) throw new GhError(t('error.tokenInvalid'), 401);
   if (res.status === 403) {
     const isSearch = resource === 'search' || /\/search\//.test(path);
     if (remainNum === 0 || /rate limit/i.test(upstream)) {
-      throw new GhError(isSearch
-        ? 'GitHub Search API 限流(HTTP 403):已登录约 30 次/分钟。稍后再点「加载更多」,或改用 PAT。'
-        : 'GitHub API 限流(HTTP 403):匿名额度仅 60 次/小时。在 ⚙ 设置填入 PAT 即提升到 5000 次/小时。', 403);
+      throw new GhError(isSearch ? t('error.rateLimitSearch') : t('error.rateLimitApi'), 403);
     }
   }
-  if (res.status === 403) throw new GhError(`权限不足(HTTP 403)${upstream ? `:${upstream}` : ''}。写操作需要对应 RW 权限的 Token。`, 403);
-  if (res.status === 404) throw new GhError(`资源不存在(HTTP 404):确认 owner/repo、分支或编号正确;私有仓需 Token 具备读取权限。 ${upstream}`, 404);
-  if (res.status === 422) throw new GhError(`请求被 GitHub 拒绝(HTTP 422):${upstream || '参数校验失败'}`, 422);
-  throw new GhError(`GitHub API 错误(HTTP ${res.status})${upstream ? `:${upstream}` : ''}`, res.status);
+  if (res.status === 403) throw new GhError(t('error.forbidden', { detail: upstream ? `:${upstream}` : '' }), 403);
+  if (res.status === 404) throw new GhError(t('error.notFound', { upstream }), 404);
+  if (res.status === 422) throw new GhError(t('error.rejected', { detail: upstream || '' }), 422);
+  throw new GhError(t('error.apiError', { status: res.status, detail: upstream ? `:${upstream}` : '' }), res.status);
 }
 
 async function gh<T>(path: string, opts: GhOpts = {}): Promise<T> {
