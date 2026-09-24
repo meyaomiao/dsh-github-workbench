@@ -1,6 +1,6 @@
 /**
- * Pull requests 页签:列表(工具条 + 新建 PR)+ 详情抽屉
- * (diffstat / check-runs 摘要 / 合并三法强确认 / 关闭重开 / 评论区)。
+ * Pull requests tab: list and creation flow plus a detail drawer with diffstat,
+ * check-run summaries, merge confirmation, close/reopen, and comments.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,13 +13,16 @@ import { Loading, ErrorBox, Empty } from './ui.tsx';
 import { errText, useUI } from './workbench.tsx';
 import { CommentsBlock, CommentComposer } from './comments.tsx';
 import { StateIcon, type ListViewProps } from './issues-view.tsx';
+import { t, type WorkbenchKey } from './locales.ts';
 
 type MergeMethod = 'merge' | 'squash' | 'rebase';
-const METHOD_LABEL: Record<MergeMethod, string> = {
-  merge: 'Merge', squash: 'Squash and merge', rebase: 'Rebase and merge',
+const METHOD_LABEL: Record<MergeMethod, WorkbenchKey> = {
+  merge: 'pulls.mergeMethod.merge',
+  squash: 'pulls.mergeMethod.squash',
+  rebase: 'pulls.mergeMethod.rebase',
 };
-const FILTER_LABEL: Record<api.PullFilter, string> = {
-  open: 'open', closed: 'closed', merged: 'merged',
+const FILTER_LABEL: Record<api.PullFilter, WorkbenchKey> = {
+  open: 'pulls.filterOpen', closed: 'pulls.filterClosed', merged: 'pulls.filterMerged',
 };
 
 export function PullsView({ ghRef, branches, visible, onCount, initialDetail, onConsumeDeep }: ListViewProps & { branches: api.BranchLite[] }): ReactNode {
@@ -59,7 +62,7 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ghRef.owner, ghRef.repo, stateFilter, sort]);
 
-  // 自动刷新(visible 门控,静默不闪)
+  // Auto-refresh is gated by visibility and remains silent.
   useEffect(() => {
     const sec = Number(localStorage.getItem('gw.autoSec') ?? 0);
     if (!visible || sec <= 0) return;
@@ -71,22 +74,22 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
     <div className="gw-colpane" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="gw-toolbar">
         <span className="gw-open-count">{list
-          ? `${list.length}${total != null ? ` / ${total}` : ''} ${FILTER_LABEL[stateFilter]}`
+          ? `${list.length}${total != null ? ` / ${total}` : ''} ${t(FILTER_LABEL[stateFilter])}`
           : '…'}</span>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <select className="gw-select" style={{ marginLeft: 0, maxWidth: 118 }}
-            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)} title="排序">
-            <option value="created">最新创建</option>
-            <option value="updated">最近更新</option>
+            value={sort} onChange={(e) => setSort(e.target.value as api.ListSort)} title={t('issues.sortCreated')}>
+            <option value="created">{t('issues.sortCreated')}</option>
+            <option value="updated">{t('issues.sortUpdated')}</option>
           </select>
           <button className={`gw-btn ${stateFilter === 'open' ? 'primary' : ''}`}
-            onClick={() => setStateFilter('open')}>开放</button>
+            onClick={() => setStateFilter('open')}>{t('pulls.filterOpen')}</button>
           <button className={`gw-btn ${stateFilter === 'closed' ? 'primary' : ''}`}
-            onClick={() => setStateFilter('closed')}>已关闭</button>
+            onClick={() => setStateFilter('closed')}>{t('pulls.filterClosed')}</button>
           <button className={`gw-btn ${stateFilter === 'merged' ? 'primary' : ''}`}
-            onClick={() => setStateFilter('merged')}>已合并</button>
+            onClick={() => setStateFilter('merged')}>{t('pulls.filterMerged')}</button>
           <button className="gw-btn primary" onClick={() => setShowNew(true)}>
-            <GwIcon name="plus" size={12} />新建 PR
+            <GwIcon name="plus" size={12} />{t('pulls.new')}
           </button>
         </span>
       </div>
@@ -94,8 +97,8 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
         {error && <ErrorBox msg={error} onRetry={() => load(true)} />}
         {!error && !list && <Loading />}
         {list?.length === 0 && <Empty>{stateFilter === 'open'
-          ? '没有打开的 Pull Request。'
-          : stateFilter === 'merged' ? '没有已合并的 Pull Request。' : '没有已关闭(未合并)的 Pull Request。'}</Empty>}
+          ? t('pulls.emptyOpen')
+          : stateFilter === 'merged' ? t('pulls.emptyMerged') : t('pulls.emptyClosed')}</Empty>}
         {list?.map((pr) => (
           <button key={pr.number} className="gw-row" onClick={() => setDetail(pr.number)}>
             <span className="gw-stateic"
@@ -109,7 +112,7 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
             </span>
             <span className="gw-rowmain">
               <span className="gw-rowtitle">
-                {pr.title}{pr.draft && <span className="gw-chip" style={{ marginLeft: 6 }}>draft</span>}
+                {pr.title}{pr.draft && <span className="gw-chip" style={{ marginLeft: 6 }}>{t('pulls.draft')}</span>}
               </span>
               <span className="gw-rowsub">
                 #{pr.number}
@@ -117,19 +120,19 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
                  · {timeAgo(pr.updated_at)}
               </span>
             </span>
-            <span className="gw-meta">更新<br />{timeAgo(pr.updated_at)}</span>
+            <span className="gw-meta">{t('pulls.updated')}<br />{timeAgo(pr.updated_at)}</span>
           </button>
         ))}
         {nextUrl && (
           <div className="gw-more">
             <button className="gw-btn" disabled={loadingMore} onClick={() => load(true, nextUrl)}>
-              {loadingMore ? '加载中…' : '加载更多'}
+              {loadingMore ? t('loading') : t('loadMore')}
             </button>
           </div>
         )}
         {!nextUrl && total != null && (list?.length ?? 0) >= 1000 && total > 1000 && (
           <div className="gw-muted" style={{ textAlign: 'center', padding: '8px 12px 14px' }}>
-            Search 最多展示 1000 条，其余请上 GitHub 网页
+            {t('search.limit')}
           </div>
         )}
       </div>
@@ -147,7 +150,7 @@ export function PullsView({ ghRef, branches, visible, onCount, initialDetail, on
   );
 }
 
-// ---------- 新建 PR ----------
+// ---------- New PR ----------
 
 function NewPRDrawer(props: {
   ghRef: GhRef; branches: api.BranchLite[];
@@ -166,13 +169,13 @@ function NewPRDrawer(props: {
     <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex' }}>
       <div className="gw-detail" style={{ position: 'static', flex: 1 }}>
         <div className="gw-detail-head">
-          <button className="gw-btn backbtn" onClick={props.onClose}><GwIcon name="chevron-left" size={12} />返回列表</button>
-          <div style={{ fontWeight: 600, marginTop: 6 }}>新建 Pull Request</div>
+          <button className="gw-btn backbtn" onClick={props.onClose}><GwIcon name="chevron-left" size={12} />{t('issues.backToList')}</button>
+          <div style={{ fontWeight: 600, marginTop: 6 }}>{t('pulls.newTitle')}</div>
         </div>
         <div className="gw-detail-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="gw-formrow">
             <div className="gw-field" style={{ flex: 1 }}>
-              <label>head(源分支)</label>
+              <label>{t('pulls.head')}</label>
               <input className="gw-input" placeholder="feature/xxx" value={head} list="gw-branches"
                 onChange={(e) => setHead(e.target.value)} autoFocus />
               <datalist id="gw-branches">
@@ -180,32 +183,32 @@ function NewPRDrawer(props: {
               </datalist>
             </div>
             <div className="gw-field" style={{ width: 140 }}>
-              <label>base(目标分支)</label>
+              <label>{t('pulls.base')}</label>
               <select className="gw-input" value={base} onChange={(e) => setBase(e.target.value)}
                 style={{ appearance: 'auto', backgroundImage: 'none', paddingRight: 8 }}>
                 {props.branches.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
               </select>
             </div>
           </div>
-          <input className="gw-input" placeholder="标题(必填)" value={title}
+          <input className="gw-input" placeholder={t('issues.titlePlaceholder')} value={title}
             onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="gw-input gw-textarea" rows={6} placeholder="描述(Markdown)"
+          <textarea className="gw-input gw-textarea" rows={6} placeholder={t('issues.bodyPlaceholder')}
             value={body} onChange={(e) => setBody(e.target.value)} />
           {error && <div className="gw-errbox">{error}</div>}
         </div>
         <div className="gw-composer">
           <div className="gw-composer-row" style={{ justifyContent: 'flex-end' }}>
-            <button className="gw-btn" onClick={props.onClose}>取消</button>
+            <button className="gw-btn" onClick={props.onClose}>{t('confirm.no')}</button>
             <button className="gw-btn primary" disabled={!title.trim() || !head.trim() || !base || busy}
               onClick={() => {
                 setBusy(true); setError(null);
                 api.createPull(props.ghRef, { title: title.trim(), body, head: head.trim(), base })
-                  .then((pr) => { ui.toast(`PR #${pr.number} 已创建`);
+                  .then((pr) => { ui.toast(t('pulls.created', { number: pr.number }));
                   getInboxStore().markSelfCreated(inboxItemKey('pr', props.ghRef.owner, props.ghRef.repo, pr.number));
                   props.onCreated(pr.number); })
                   .catch((e) => setError(errText(e)))
                   .finally(() => setBusy(false));
-              }}>{busy ? '创建中…' : '创建 PR'}</button>
+              }}>{busy ? t('issues.creating') : t('pulls.create')}</button>
           </div>
         </div>
       </div>
@@ -213,7 +216,7 @@ function NewPRDrawer(props: {
   );
 }
 
-// ---------- 详情抽屉 ----------
+// ---------- Detail drawer ----------
 
 function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; onChanged: () => void }): ReactNode {
   const ui = useUI();
@@ -252,7 +255,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
         <div className="gw-detail" style={{ position: 'static', flex: 1 }}>
           <div className="gw-detail-head">
             <button className="gw-btn backbtn" onClick={props.onClose}>
-              <GwIcon name="chevron-left" size={12} />返回列表
+              <GwIcon name="chevron-left" size={12} />{t('issues.backToList')}
             </button>
           </div>
           <ErrorBox msg={error} onRetry={loadAll} />
@@ -272,14 +275,14 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
   async function doMerge(): Promise<void> {
     if (!pull) return;
     if (!(await ui.confirm({
-      title: `以 ${METHOD_LABEL[method]} 合并 #${pull.number}?`,
-      body: `${pull.head.ref} → ${pull.base.ref}\n将按 GitHub 的该方式产生提交,合并后通常自动删除源分支。`,
-      confirmText: METHOD_LABEL[method], danger: true,
+      title: t('pulls.mergeConfirm', { method: t(METHOD_LABEL[method]), number: pull.number }),
+      body: t('pulls.mergeBody', { head: pull.head.ref, base: pull.base.ref }),
+      confirmText: t(METHOD_LABEL[method]), danger: true,
     }))) return;
     setBusy(true);
     try {
       await api.mergePull(props.ghRef, pull.number, method);
-      ui.toast(`PR #${pull.number} 已合并(${METHOD_LABEL[method]})`);
+      ui.toast(t('pulls.merged', { number: pull.number, method: t(METHOD_LABEL[method]) }));
       props.onChanged(); loadAll();
     } catch (e) { ui.toast(errText(e), 'err'); }
     finally { setBusy(false); }
@@ -289,11 +292,11 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
     if (!pull) return;
     const toClosed = !closed;
     if (toClosed && !(await ui.confirm({
-      title: `关闭 PR #${pull.number}?`, body: pull.title, confirmText: '关闭', danger: true,
+      title: t('pulls.closeConfirm', { number: pull.number }), body: pull.title, confirmText: t('confirm.yes'), danger: true,
     }))) return;
     try {
       await api.patchIssue(props.ghRef, pull.number, { state: toClosed ? 'closed' : 'open' });
-      ui.toast(toClosed ? `PR #${pull.number} 已关闭` : `PR #${pull.number} 已重新打开`);
+      ui.toast(toClosed ? t('pulls.closed', { number: pull.number }) : t('pulls.reopened', { number: pull.number }));
       props.onChanged(); loadAll();
     } catch (e) { ui.toast(errText(e), 'err'); }
   }
@@ -303,7 +306,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
       <div className="gw-detail" style={{ position: 'static', flex: 1 }}>
         <div className="gw-detail-head">
           <button className="gw-btn backbtn" onClick={props.onClose}>
-            <GwIcon name="chevron-left" size={12} />返回列表
+            <GwIcon name="chevron-left" size={12} />{t('issues.backToList')}
           </button>
           <div style={{ fontWeight: 600, marginTop: 6, fontSize: 13 }}>
             <StateIcon closed={closed} merged={merged} />{pull.title} <span className="gw-muted">#{pull.number}</span>
@@ -312,9 +315,9 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
             <span className="gw-branch-chip">{pull.head.label} → {pull.base.label}</span>
             {(pull.additions !== undefined) && (
               <span><span className="gw-diffstat-add">+{pull.additions}</span> <span className="gw-diffstat-del">−{pull.deletions}</span>
-                {pull.changed_files !== undefined ? ` · ${pull.changed_files} files` : ''}</span>
+                {pull.changed_files !== undefined ? ` · ${t('pulls.files', { count: pull.changed_files })}` : ''}</span>
             )}
-            · {timeAgo(pull.created_at)} 创建
+            · {t('pulls.createdAt')} {timeAgo(pull.created_at)}
             {checks !== null && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 ·
@@ -323,7 +326,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
                   : pendingChecks > 0
                     ? <span className="gw-checkdot" style={{ background: 'var(--dsw-alias-state-attention-primary)' }} />
                     : <span className="gw-checkdot" style={{ background: 'var(--dsw-alias-state-success-primary)' }} />}
-                {badChecks > 0 ? `失败 ${badChecks}` : pendingChecks > 0 ? '进行中' : `通过 ${okChecks}`}
+                {badChecks > 0 ? t('pulls.checksFailed', { count: badChecks }) : pendingChecks > 0 ? t('pulls.checksPending') : t('pulls.checksPassed', { count: okChecks })}
               </span>
             )}
             <a className="gw-link" href={pull.html_url} target="_blank" rel="noreferrer"
@@ -332,41 +335,41 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
             </a>
           </div>
 
-          {/* 合并控制条 */}
+          {/* Merge controls */}
           {canMerge && (
             <div className="gw-composer-row" style={{ marginTop: 8 }}>
               <select className="gw-select" style={{ marginLeft: 0, maxWidth: 190 }}
                 value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>
-                <option value="merge">Create a merge commit</option>
-                <option value="squash">Squash and merge</option>
-                <option value="rebase">Rebase and merge</option>
+                <option value="merge">{t('pulls.mergeMethod.mergeCommit')}</option>
+                <option value="squash">{t('pulls.mergeMethod.squash')}</option>
+                <option value="rebase">{t('pulls.mergeMethod.rebase')}</option>
               </select>
               <button className="gw-btn primary" disabled={busy || pull.mergeable === false}
                 onClick={doMerge}>
-                <GwIcon name="merge" size={12} />{METHOD_LABEL[method]}
+                <GwIcon name="merge" size={12} />{t(METHOD_LABEL[method])}
               </button>
               {pull.mergeable === false && (
-                <span className="gw-muted" style={{ fontSize: 10 }}>存在冲突,无法合并</span>
+                <span className="gw-muted" style={{ fontSize: 10 }}>{t('pulls.mergeConflict')}</span>
               )}
             </div>
           )}
 
-          {/* checks 明细 */}
+          {/* Check details */}
           {checks !== null && checks.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
               {checks.slice(0, 8).map((c) => (
                 <a key={c.id} className="gw-rowsub gw-link" href={c.html_url} target="_blank" rel="noreferrer"
                   style={{ textDecoration: 'none' }}>
-                  <CheckDot run={c} />{c.name ?? 'check'} · {c.conclusion ?? c.status}
+                  <CheckDot run={c} />{c.name ?? t('pulls.checkFallback')} · {c.conclusion ?? c.status}
                 </a>
               ))}
-              {checks.length > 8 && <span className="gw-muted">… 其余 {checks.length - 8} 项见 GitHub</span>}
+              {checks.length > 8 && <span className="gw-muted">{t('pulls.moreChecks', { count: checks.length - 8 })}</span>}
             </div>
           )}
         </div>
 
         <div className="gw-detail-body">
-          {pull.body || '(无描述)'}
+          {pull.body || t('pulls.noDescription')}
           <CommentsBlock ghRef={props.ghRef} number={props.number} comments={comments} onChanged={loadAll}
             nextUrl={commentsNext} loadingMore={loadingMoreComments}
             onLoadMore={() => {
@@ -386,7 +389,7 @@ function PullDrawer(props: { ghRef: GhRef; number: number; onClose: () => void; 
           <CommentComposer ghRef={props.ghRef} number={props.number} onDone={loadAll} />
           <div className="gw-composer-row">
             <button className={`gw-btn ${closed ? '' : 'danger'}`} onClick={toggleState}>
-              {closed ? '重新打开' : '关闭 PR'}
+              {closed ? t('pulls.reopen') : t('pulls.close')}
             </button>
           </div>
         </div>

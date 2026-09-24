@@ -1,31 +1,29 @@
 /**
- * 本地重述的最小宿主类型(与 univer-sidebar 同策略):
- * 不 value-import dsh-better-sidebar,避免双实例与构建纯度门问题;
- * 运行时经轮询探测 ctx.betterSidebar 出现后再注册。
+ * Minimal local host types, following the univer-sidebar strategy.
+ * dsh-better-sidebar is not imported as a runtime value, avoiding duplicate
+ * instances and keeping the build purity gate intact. The runtime waits for
+ * ctx.betterSidebar before registering a fallback tab.
  */
 
 import type { ReactNode } from 'react';
 
-/** 客户端 cordis context 的最小切面。 */
+/** Minimal client-side Cordis context surface. */
 export interface ClientCtx {
-  /** 注册 fiber 级清理钩子(卸载/HMR 时自动调用返回的 disposer)。 */
+  /** Registers a fiber-level cleanup hook for unload and HMR. */
   effect(fn: () => (() => void) | void, label?: string): void;
-  /**
-   * 运行时服务等待(cordis Context 方法,非服务属性):声明依赖并在其
-   * 就绪时执行回调。DSH 0.1.5+ 用于等待官方原生右侧栏服务。
-   */
+  /** Waits for runtime services and invokes the callback when they are ready. */
   inject?(
     deps: readonly string[],
     fn: (ctx: { get(name: string): unknown }) => (() => void) | void,
   ): { dispose?: () => void };
-  /** 官方座位系统(DSH web client 核心服务;原生右侧栏内容体注册需要)。 */
+  /** Official slot system used to register native sidebar content. */
   slots?: {
     inject(name: string, fn: () => (() => void) | void): () => void;
     register(spec: Record<string, unknown>, component: unknown): () => void;
   };
 }
 
-/** better-sidebar 注册表的本地最小契约(registerTab + 可选 badge 刷新)。 */
+/** Minimal better-sidebar registry contract. */
 export interface SidebarRegistry {
   registerTab(descriptor: TabDescriptorLike): () => void;
   features?: readonly string[];
@@ -36,13 +34,13 @@ export interface SidebarRegistry {
   };
 }
 
-/** 会话作用域(与 better-sidebar 的 SessionScope 对齐的字段子集)。 */
+/** Session scope fields aligned with better-sidebar. */
 export interface SessionScopeLite {
   sessionId: string;
   cwd?: string;
 }
 
-/** SidebarTab 的本地字段子集。 */
+/** Minimal SidebarTab field subset. */
 export interface SidebarTabLite {
   id: string;
   type: string;
@@ -50,14 +48,14 @@ export interface SidebarTabLite {
   meta?: unknown;
 }
 
-/** TabComponentProps 的本地字段子集。 */
+/** Minimal TabComponentProps field subset. */
 export interface TabPropsLike {
   scope: SessionScopeLite;
   visible: boolean;
   tab: SidebarTabLite;
 }
 
-/** TabDescriptor 的本地最小契约。 */
+/** Minimal TabDescriptor field subset. */
 export interface TabDescriptorLike {
   id: string;
   title: string | (() => string);
@@ -66,11 +64,11 @@ export interface TabDescriptorLike {
   single?: boolean;
   dedupeKey?: (tab: { id: string; type: string }) => string | undefined;
   available?: unknown;
-  /** 声明式设置(pluginToggles/render),宿主侧形状,本地仅透传。 */
+  /** Declarative host settings passed through unchanged. */
   settings?: unknown;
-  /** 外链认领(v0.13+):命中 github.com 链接时由宿主以本类型 openTab。 */
+  /** Claims matching GitHub links when the host setting is enabled. */
   urlTarget?: (url: URL) => boolean;
-  /** 自定义铸造(每个链接独立实例,URL 落在 tab.path)。 */
+  /** Creates an independent tab for each claimed link. */
   createTab?: (state: { nextBrowser: number }) =>
     { tab: SidebarTabLite; patch?: Record<string, unknown> } | null;
   badge?: () => string | number | null | undefined;

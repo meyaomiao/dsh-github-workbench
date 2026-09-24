@@ -1,6 +1,7 @@
 /**
- * Code 页签:左列远端目录树(git trees API 单次 recursive 拉取),
- * 右侧文件预览(contents API,<900KB 文本行号渲染;二进制/超大降级为外链卡片)。
+ * Code tab: remote directory tree on the left and file preview on the right.
+ * The contents API renders text under 900 KB with line numbers; binary and
+ * oversized files fall back to an external link.
  */
 
 import { useEffect, useState } from 'react';
@@ -10,6 +11,7 @@ import * as api from './api.ts';
 import { buildTree, fmtSize, ghRefKey, type GhRef, type TreeNode } from './lib.ts';
 import { Loading, ErrorBox } from './ui.tsx';
 import { errText } from './workbench.tsx';
+import { t } from './locales.ts';
 
 export interface CodeViewProps {
   ghRef: GhRef;
@@ -22,7 +24,7 @@ export function CodeView({ ghRef, branch }: CodeViewProps): ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
-  const [treeOpen, setTreeOpen] = useState(false); // 窄屏抽屉开关(宽屏由 CSS 忽略)
+  const [treeOpen, setTreeOpen] = useState(false); // Narrow-screen drawer toggle; CSS ignores it on wide screens.
 
   useEffect(() => {
     let dead = false;
@@ -32,7 +34,7 @@ export function CodeView({ ghRef, branch }: CodeViewProps): ReactNode {
         if (dead) return;
         setItems(r.items);
         setTruncated(r.truncated);
-        // 默认展开第一层目录
+        // Expand top-level directories by default.
         const first = new Set<string>();
         for (const it of r.items) {
           const top = it.path.split('/')[0];
@@ -45,13 +47,13 @@ export function CodeView({ ghRef, branch }: CodeViewProps): ReactNode {
   }, [ghRef.owner, ghRef.repo, branch]);
 
   if (error) return <ErrorBox msg={error} onRetry={() => setReloadSelf()} />;
-  if (!items) return <Loading label="拉取目录树…" />;
+  if (!items) return <Loading label={t('loadingTree')} />;
 
   const nodes = buildTree(items);
 
   function setReloadSelf(): void {
     setSelected(null);
-    setItems(null); // 触发重载(effect 依赖不变,这里手动置空再由 key 重挂载更稳;简化:直接重新拉取)
+    setItems(null);
     api.getTree(ghRef, branch)
       .then((r) => { setItems(r.items); setTruncated(r.truncated); })
       .catch((e) => setError(errText(e)));
@@ -69,28 +71,28 @@ export function CodeView({ ghRef, branch }: CodeViewProps): ReactNode {
     <div className={'gw-codepane' + (treeOpen ? ' tree-open' : '')}>
       <button
         className='gw-btn gw-tree-fab'
-        title={treeOpen ? '关闭目录' : '目录'}
+        title={treeOpen ? t('tree.close') : t('tree.open')}
         onClick={() => setTreeOpen((v) => !v)}>
         <GwIcon name={treeOpen ? 'x-circle' : 'folder'} size={12} />
-        {treeOpen ? '收起' : '目录'}
+        {treeOpen ? t('tree.collapse') : t('tree.open')}
       </button>
       <div className="gw-tree">
         {truncated && (
           <div className="gw-pop-hint" style={{ padding: '2px 6px 8px' }}>
-            目录过大被 GitHub 截断,仅显示部分条目。
+            {t('tree.truncated')}
           </div>
         )}
         {nodes.map((n) => (
           <TreeRow key={n.path} node={n} depth={0} expanded={expanded} selected={selected}
             onToggle={toggle} onSelect={(path) => { setSelected(path); setTreeOpen(false); }} />
         ))}
-        {nodes.length === 0 && <div className="gw-empty">空仓库 / 空分支</div>}
+        {nodes.length === 0 && <div className="gw-empty">{t('empty.repo')}</div>}
       </div>
       <div className="gw-filepane">
         {selected
           ? <FilePane key={`${ghRefKey(ghRef)}@${branch}:${selected}`} ghRef={ghRef} path={selected} branch={branch}
               onClose={() => setSelected(null)} />
-          : <div className="gw-empty">从左侧选择文件预览<br />二进制 / 超大文件会给出下载与 GitHub 外链</div>}
+          : <div className="gw-empty">{t('empty.selectFile')}</div>}
       </div>
     </div>
   );
@@ -158,12 +160,12 @@ function FilePane(props: { ghRef: GhRef; path: string; branch: string; onClose: 
             <GwIcon name="external-link" size={11} />GitHub
           </a>
         )}
-        <button className="gw-hbtn" title="关闭" onClick={props.onClose}>
+        <button className="gw-hbtn" title={t('tree.closeFile')} onClick={props.onClose}>
           <GwIcon name="x-circle" size={13} />
         </button>
       </div>
       {error && <ErrorBox msg={error} />}
-      {!error && !data && <Loading label="读取文件…" />}
+      {!error && !data && <Loading label={t('loadingFile')} />}
       {data?.kind === 'text' && (
         <div className="gw-code">
           {(data.text ?? '').split('\n').map((line, i) => (
@@ -174,7 +176,7 @@ function FilePane(props: { ghRef: GhRef; path: string; branch: string; onClose: 
           ))}
           {data.truncatedLines && (
             <div className="gw-pop-hint" style={{ padding: '6px 12px' }}>
-              超过 3000 行,已截断 —— 完整内容请到 GitHub 查看。
+              {t('file.truncated')}
             </div>
           )}
         </div>
@@ -182,9 +184,9 @@ function FilePane(props: { ghRef: GhRef; path: string; branch: string; onClose: 
       {data && data.kind !== 'text' && (
         <div className="gw-empty">
           <div>
-            {data.kind === 'too-big' ? '文件超过 900KB,不在侧边栏内联渲染。' : '二进制文件,无法文本预览。'}
+            {data.kind === 'too-big' ? t('file.tooBig') : t('file.binary')}
             <br />
-            <a className="gw-link" href={data.htmlUrl} target="_blank" rel="noreferrer">在 GitHub 打开 ↗</a>
+            <a className="gw-link" href={data.htmlUrl} target="_blank" rel="noreferrer">{t('file.openOnGitHub')}</a>
           </div>
         </div>
       )}

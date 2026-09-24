@@ -8,13 +8,13 @@ import {
 import type { InboxSearchHit, GhRun } from '../src/api.ts';
 
 describe('chunkRepoQualifiers', () => {
-  it('空输入', () => {
+  it('handles an empty input', () => {
     assert.deepEqual(chunkRepoQualifiers([]), []);
   });
-  it('单仓一组', () => {
+  it('keeps a single repository in one group', () => {
     assert.deepEqual(chunkRepoQualifiers(['a/b']), [['a/b']]);
   });
-  it('超长切批', () => {
+  it('splits oversized input into batches', () => {
     const names = ['aaaa/bbbb', 'cccc/dddd', 'eeee/ffff'];
     const chunks = chunkRepoQualifiers(names, 24);
     assert.ok(chunks.length >= 2);
@@ -32,20 +32,20 @@ describe('inboxItemKey / mergeIncoming', () => {
     htmlUrl: 'https://github.com/o/r/pull/2', user: 'bob', createdAt: '2026-01-03T00:00:00Z', unread: true,
   };
 
-  it('key 形态', () => {
+  it('uses stable item keys', () => {
     assert.equal(inboxItemKey('issue', 'o', 'r', 12), 'issue:o/r#12');
     assert.equal(inboxItemKey('pr', 'o', 'r', 12), 'pr:o/r#12');
     assert.equal(inboxItemKey('actions', 'o', 'r', 99), 'actions:o/r#99');
   });
 
-  it('新条目按 createdAt 倒序,已有 key 不覆盖', () => {
+  it('sorts new items by createdAt without replacing existing keys', () => {
     const { items, fresh } = mergeIncoming([a], [b, { ...a, title: 'changed' }], new Set(), new Set());
     assert.equal(items[0].key, 'pr:o/r#2');
     assert.equal(items.find((x) => x.key === 'issue:o/r#1')?.title, 'one');
     assert.deepEqual(fresh.map((x) => x.key), ['pr:o/r#2']);
   });
 
-  it('readKeys / selfKeys 进箱但未读为 false,不算 fresh', () => {
+  it('keeps read and self-created items out of the fresh set', () => {
     const { items, fresh } = mergeIncoming([], [a, b], new Set(['issue:o/r#1']), new Set(['pr:o/r#2']));
     assert.equal(items.find((x) => x.key === 'issue:o/r#1')?.unread, false);
     assert.equal(items.find((x) => x.key === 'pr:o/r#2')?.unread, false);
@@ -86,9 +86,9 @@ describe('createInboxStore', () => {
     };
   }
 
-  it('poll 插入未读,self-mark 不算未读', async () => {
+  it('inserts polled items as unread unless self-marked', async () => {
     const hit: InboxSearchHit = {
-      kind: 'issue', owner: 'acme', repo: 'web', number: 12, title: '登录失败',
+      kind: 'issue', owner: 'acme', repo: 'web', number: 12, title: 'Login failed',
       htmlUrl: 'https://github.com/acme/web/issues/12', user: 'ghost',
       createdAt: '2026-01-09T12:00:00Z',
     };
@@ -97,17 +97,17 @@ describe('createInboxStore', () => {
     const fresh = await store.pollOnce();
     assert.equal(fresh.length, 0);
     assert.equal(store.unreadCount(), 0);
-    assert.equal(store.getSnapshot().items[0]?.title, '登录失败');
+    assert.equal(store.getSnapshot().items[0]?.title, 'Login failed');
   });
 
-  it('无 token 不拉、未读为 0', async () => {
+  it('does not poll without a token', async () => {
     const store = createInboxStore(deps([], { getToken: () => '' }));
     await store.pollOnce();
     assert.equal(store.getSnapshot().hasToken, false);
     assert.equal(store.unreadCount(), 0);
   });
 
-  it('markRead / markAllRead 按 kind', async () => {
+  it('marks items read by kind', async () => {
     const hits: InboxSearchHit[] = [
       {
         kind: 'issue', owner: 'acme', repo: 'web', number: 1, title: 'x',

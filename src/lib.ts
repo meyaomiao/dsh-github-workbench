@@ -1,9 +1,9 @@
 /**
- * 纯函数助手:解析 / 树构建 / 时间与容量格式化(base64 解码)。
- * 独立成模块便于 node:test 单测(不触 DOM / fetch)。
+ * Pure helpers for parsing, tree construction, time and size formatting, and
+ * base64 decoding. Kept DOM-free for focused node:test coverage.
  */
 
-/** GitHub 仓库坐标。 */
+/** GitHub repository coordinates. */
 export interface GhRef {
   owner: string;
   repo: string;
@@ -13,14 +13,14 @@ export function ghRefKey(ref: GhRef): string {
   return `${ref.owner}/${ref.repo}`;
 }
 
-/** 从 .git/config 文本解析第一个 GitHub remote(origin 优先)。 */
+/** Parse the first GitHub remote from .git/config, preferring origin. */
 export function parseGithubRemote(configText: string): GhRef | null {
   const re = /url\s*=\s*(?:https?:\/\/|git@|ssh:\/\/git@)(?:www\.)?github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:\s|$)/g;
   let fallback: GhRef | null = null;
   for (const m of configText.matchAll(re)) {
     const ref = { owner: m[1], repo: m[2] };
     if (!fallback) fallback = ref;
-    // 含 "origin" 的 section 优先:向前找最近的 [remote "..."]
+    // Prefer a section containing "origin" by finding the nearest remote header.
     const before = configText.slice(0, m.index ?? 0);
     const sec = before.lastIndexOf('[remote');
     if (sec >= 0 && /\[remote\s+"origin"\]/.test(before.slice(sec))) return ref;
@@ -28,7 +28,7 @@ export function parseGithubRemote(configText: string): GhRef | null {
   return fallback;
 }
 
-/** 解析用户输入:owner/repo、https://github.com/o/r(.git)、git@github.com:o/r.git。 */
+/** Parse owner/repo, GitHub URLs, and SSH repository inputs. */
 export function parseRepoInput(input: string): GhRef | null {
   const raw = input.trim();
   if (!raw) return null;
@@ -39,7 +39,7 @@ export function parseRepoInput(input: string): GhRef | null {
   return null;
 }
 
-/** 查询串构造(跳过空值)。 */
+/** Build a query string while skipping empty values. */
 export function qs(params: Record<string, string | number | undefined>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -49,7 +49,7 @@ export function qs(params: Record<string, string | number | undefined>): string 
   return s ? `?${s}` : '';
 }
 
-/** 解析 GitHub `Link` 响应头里的 rel=next(没有下一页则 null)。 */
+/** Read rel=next from a GitHub Link header, or return null. */
 export function parseLinkNext(link: string | null | undefined): string | null {
   if (!link) return null;
   for (const part of link.split(',')) {
@@ -59,7 +59,7 @@ export function parseLinkNext(link: string | null | undefined): string | null {
   return null;
 }
 
-// ---------- git trees → 树 ----------
+// ---------- Git trees to nested nodes ----------
 
 export interface TreeItem {
   path: string;
@@ -75,7 +75,7 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
-/** 平铺 tree 列表 → 排序嵌套树(目录在前,同型按名排序)。 */
+/** Sort a flat tree list into nested directories-first nodes. */
 export function buildTree(items: readonly TreeItem[]): TreeNode[] {
   const roots: TreeNode[] = [];
   const dirs = new Map<string, TreeNode>();
@@ -109,7 +109,7 @@ export function buildTree(items: readonly TreeItem[]): TreeNode[] {
   return roots;
 }
 
-/** 收集某目录下所有直接子路径的展开集(懒展开用)。 */
+/** Collect direct child paths for lazy expansion. */
 export function collectDirPaths(nodes: readonly TreeNode[], out: string[] = []): string[] {
   for (const n of nodes) {
     if (n.type === 'tree') { out.push(n.path); collectDirPaths(n.children ?? [], out); }
@@ -117,7 +117,7 @@ export function collectDirPaths(nodes: readonly TreeNode[], out: string[] = []):
   return out;
 }
 
-/** 从任意 GitHub URL 提取坐标与深链目标(非 github 域返回 null)。 */
+/** Extract repository coordinates and deep-link targets from a GitHub URL. */
 export function parseGithubUrl(href: string): {
   ref: GhRef; kind?: 'issues' | 'pulls' | 'actions'; number?: number;
 } | null {
@@ -135,26 +135,28 @@ export function parseGithubUrl(href: string): {
   } catch { return null; }
 }
 
-// ---------- 格式化 ----------
+// ---------- Formatting ----------
 
-/** 中文相对时间(<1min → 刚刚;超一年 → 具体日期)。 */
+import { t } from './locales.ts';
+
+/** Relative time (<1min → just now; over a year → specific date). */
 export function timeAgo(iso: string, now: number = Date.now()): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  const diff = Math.max(0, now - t);
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diff = Math.max(0, now - ts);
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return '刚刚';
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 1) return t('time.justNow');
+  if (min < 60) return t('time.minutesAgo', { n: min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
+  if (h < 24) return t('time.hoursAgo', { n: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d} 天前`;
+  if (d < 30) return t('time.daysAgo', { n: d });
   const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo} 个月前`;
-  return new Date(t).toISOString().slice(0, 10);
+  if (mo < 12) return t('time.monthsAgo', { n: mo });
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
-/** 运行时长(ms)。 */
+/** Format a duration in milliseconds. */
 export function fmtDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
@@ -173,8 +175,8 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 /**
- * 把 repo:owner/name OR … 切成不超过 maxLen 的若干组(Search q 长度限制)。
- * 返回每组的 fullName 列表,空输入返回 [].
+ * Split repo:owner/name OR terms into groups within maxLen for Search queries.
+ * Return full-name groups, or an empty list for empty input.
  */
 export function chunkRepoQualifiers(fullNames: readonly string[], maxLen = 220): string[][] {
   const chunks: string[][] = [];
@@ -199,12 +201,12 @@ export function chunkRepoQualifiers(fullNames: readonly string[], maxLen = 220):
 
 export type InboxKind = 'issue' | 'pr' | 'actions';
 
-/** 收件箱条目稳定键:kind:owner/repo#n */
+/** Stable inbox item key: kind:owner/repo#n. */
 export function inboxItemKey(kind: InboxKind, owner: string, repo: string, n: number): string {
   return `${kind}:${owner}/${repo}#${n}`;
 }
 
-/** GitHub contents API 的 base64(可能带换行)→ UTF-8 文本。 */
+/** Decode GitHub contents API base64, including line breaks, to UTF-8. */
 export function decodeBase64Utf8(b64: string): string {
   const bin = atob(b64.replace(/\s+/g, ''));
   const bytes = new Uint8Array(bin.length);
@@ -212,7 +214,7 @@ export function decodeBase64Utf8(b64: string): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
 }
 
-/** label 色值(#rgb/#rrggbb)上的人眼对比文字色。 */
+/** Choose a readable text color for a #rgb or #rrggbb label color. */
 export function labelTextColor(hex: string): string {
   const h = hex.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.padEnd(6, '0');

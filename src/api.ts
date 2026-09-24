@@ -1,9 +1,11 @@
 /**
- * GitHub REST v3 客户端:浏览器直连 api.github.com(CORS 开放),
- * Bearer PAT 鉴权、限流/错误归一为中文可操作提示,全部端点类型化。
+ * GitHub REST v3 client using browser calls to api.github.com.
+ * Bearer PAT authentication, rate-limit handling, and actionable errors are
+ * localized while endpoint types remain explicit.
  */
 
 import { qs, decodeBase64Utf8, parseLinkNext, parseGithubUrl, chunkRepoQualifiers, type GhRef, ghRefKey } from './lib.ts';
+import { t } from './locales.ts';
 
 const API = 'https://api.github.com';
 const TOKEN_KEY = 'gw.token';
@@ -13,15 +15,15 @@ export function getToken(): string {
 }
 export function setToken(token: string): void {
   repoCache = null;
-  viewerCache = undefined; // 身份变了,/user 结果作废
+  viewerCache = undefined; // Identity changed; invalidate /user data.
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
-  } catch { /* 隐私模式等:忽略 */ }
+  } catch { /* Ignore storage errors such as private mode. */ }
 }
 
 let lastRemaining: number | null = null;
-/** 最近一次响应的 core 限额剩余(页脚展示)。 */
+/** Remaining core API quota from the latest response, shown in the footer. */
 export function rateRemaining(): number | null { return lastRemaining; }
 
 export class GhError extends Error {
@@ -36,7 +38,7 @@ export class GhError extends Error {
 interface GhOpts {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
-  /** 覆盖 Accept(如 check-runs 的预览头)。 */
+  /** Override Accept, for example for check-run preview headers. */
   accept?: string;
 }
 
@@ -63,7 +65,7 @@ async function ghRequest(path: string, opts: GhOpts = {}): Promise<GhResponse> {
   const remain = res.headers.get('x-ratelimit-remaining');
   const resource = res.headers.get('x-ratelimit-resource');
   const remainNum = remain != null ? Number(remain) : null;
-  // Search 有独立配额,不要覆盖页脚展示的 core 剩余
+  // Search has a separate quota; do not overwrite the core footer value.
   if (remainNum != null && resource !== 'search') lastRemaining = remainNum;
   const link = res.headers.get('link');
 
@@ -73,20 +75,20 @@ async function ghRequest(path: string, opts: GhOpts = {}): Promise<GhResponse> {
   }
 
   let upstream = '';
-  try { upstream = (await res.json() as { message?: string }).message ?? ''; } catch { /* 忽略 */ }
-  if (res.status === 401) throw new GhError('Token 无效或已过期(HTTP 401)。请在 ⚙ 设置里检查 Personal Access Token。', 401);
+  try { upstream = (await res.json() as { message?: string }).message ?? ''; } catch { /* Ignore malformed error bodies. */ }
+  if (res.status === 401) throw new GhError(t('error.tokenInvalid'), 401);
   if (res.status === 403) {
     const isSearch = resource === 'search' || /\/search\//.test(path);
     if (remainNum === 0 || /rate limit/i.test(upstream)) {
-      throw new GhError(isSearch
-        ? 'GitHub Search API 限流(HTTP 403):已登录约 30 次/分钟。稍后再点「加载更多」,或改用 PAT。'
-        : 'GitHub API 限流(HTTP 403):匿名额度仅 60 次/小时。在 ⚙ 设置填入 PAT 即提升到 5000 次/小时。', 403);
+      throw new GhError(isSearch ? t('error.rateLimitSearch') : t('error.rateLimitApi'), 403);
     }
   }
-  if (res.status === 403) throw new GhError(`权限不足(HTTP 403)${upstream ? `:${upstream}` : ''}。写操作需要对应 RW 权限的 Token。`, 403);
-  if (res.status === 404) throw new GhError(`资源不存在(HTTP 404):确认 owner/repo、分支或编号正确;私有仓需 Token 具备读取权限。 ${upstream}`, 404);
-  if (res.status === 422) throw new GhError(`请求被 GitHub 拒绝(HTTP 422):${upstream || '参数校验失败'}`, 422);
-  throw new GhError(`GitHub API 错误(HTTP ${res.status})${upstream ? `:${upstream}` : ''}`, res.status);
+  if (res.status === 403) throw new GhError(t('error.forbidden', { detail: upstream ? `:${upstream}` : '' }), 403);
+  if (res.status === 404) throw new GhError(t('error.notFound', { upstream }), 404);
+  if (res.status === 422) {
+    throw new GhError(upstream ? t('error.rejected', { detail: upstream }) : t('error.rejectedNoDetail'), 422);
+  }
+  throw new GhError(t('error.apiError', { status: res.status, detail: upstream ? `:${upstream}` : '' }), res.status);
 }
 
 async function gh<T>(path: string, opts: GhOpts = {}): Promise<T> {
@@ -99,7 +101,7 @@ async function ghList<T>(path: string, opts: GhOpts = {}): Promise<{ data: T; ne
   return { data: r.json as T, nextUrl: parseLinkNext(r.link) };
 }
 
-// ---------- 公共类型 ----------
+// ---------- Shared types ----------
 
 export interface GhUser { login: string }
 export interface GhLabel { name: string; color: string }
@@ -126,7 +128,7 @@ export type ListSort = 'created' | 'updated';
 export type IssueState = 'open' | 'closed';
 export type PullFilter = 'open' | 'closed' | 'merged';
 
-/** 一页列表:items 是本页,nextUrl 有值就能「加载更多」,totalCount 是仓库真实总数(Search 或并行计数)。 */
+/** One page of results with an optional next URL and repository total. */
 export interface ListPage<T> {
   items: T[];
   nextUrl: string | null;
@@ -147,7 +149,7 @@ export interface RepoMeta {
 }
 export interface BranchLite { name: string }
 
-// ---------- 读 ----------
+// ---------- Read endpoints ----------
 
 interface RawRepo { full_name: string; description: string | null; default_branch: string; private: boolean; stargazers_count: number; html_url: string }
 
@@ -269,7 +271,7 @@ async function searchPage(q: string, sort: ListSort, pageUrl?: string): Promise<
   return { items, nextUrl, totalCount: total };
 }
 
-/** Issues 列表:Search API `is:issue`,不被 PR 占坑;默认按创建时间(网页 Newest)。 */
+/** List Issues through Search without including Pull requests. */
 export async function listIssues(
   ref: GhRef,
   state: IssueState = 'open',
@@ -295,7 +297,7 @@ export async function listComments(ref: GhRef, n: number, pageUrl?: string): Pro
   return { items: data, nextUrl: data.length === 0 ? null : (nextUrl ?? computed), totalCount: null };
 }
 
-/** PR 列表:Search `is:pr`(+ is:unmerged / is:merged),closed 与 merged 分开;默认 Newest。 */
+/** List Pull requests through Search, keeping closed and merged states separate. */
 export async function listPulls(
   ref: GhRef,
   filter: PullFilter = 'open',
@@ -322,14 +324,14 @@ export async function listRuns(ref: GhRef): Promise<GhRun[]> {
   return r.workflow_runs;
 }
 
-// ---------- 自动拉取当前身份可见的仓库 ----------
+// ---------- Repository discovery ----------
 
 export interface RepoLite {
   fullName: string;
   isPrivate: boolean;
   pushedAt: string;
   description: string | null;
-  /** 仓库所有者登录名(判断"非本人的仓库"用)。 */
+  /** Owner login used to identify repositories not owned by the viewer. */
   ownerLogin: string;
 }
 
@@ -344,7 +346,7 @@ const REPO_CACHE_TTL = 5 * 60_000;
 const REPO_PAGE_CAP = 3;
 const REPO_HARD_CAP = 300;
 
-/** 当前 Token 可见的全部仓库(owner + 协作 + 组织成员),按最近推送排序;5 分钟缓存。跟分页,硬顶 300。 */
+/** List repositories visible to the current token, sorted by recent push. */
 export async function getMyRepos(force = false): Promise<RepoLite[]> {
   if (!force && repoCache && Date.now() - repoCache.at < REPO_CACHE_TTL) return repoCache.data;
   const data: RepoLite[] = [];
@@ -373,7 +375,7 @@ export async function getMyRepos(force = false): Promise<RepoLite[]> {
   return data;
 }
 
-/** 最近一次 getMyRepos 是否因 300 顶而截断。 */
+/** Whether the latest repository listing was truncated at the hard cap. */
 export function myReposTruncated(): boolean {
   return repoCache?.truncated ?? false;
 }
@@ -386,19 +388,19 @@ export interface GhSearchRepo {
 
 let searchSeq = 0;
 
-/** 按名称搜索任意公开仓库(search API,限流 30 次/分;带 450ms 去抖由 UI 层负责)。 */
+/** Search public repositories by name through the Search API. */
 export async function searchPublicRepos(q: string): Promise<GhSearchRepo[]> {
   const seq = ++searchSeq;
   const r = await gh<{ items: { full_name: string; stargazers_count: number; description: string | null }[] }>(
     `/search/repositories${qs({ q: `${q} in:name`, per_page: 8, sort: 'stars' })}`);
-  if (seq !== searchSeq) return []; // 过期响应丢弃
+  if (seq !== searchSeq) return []; // Drop stale responses.
   return r.items.map((i) => ({ fullName: i.full_name, stars: i.stargazers_count, description: i.description }));
 }
 
-/** 清空仓库列表缓存(token 变更后调用)。 */
+/** Clear the repository cache after a token change. */
 export function invalidateRepoCache(): void { repoCache = null; }
 
-// ---------- 收件箱:跨仓新建 Issue/PR(一次 Search 再拆 kind) ----------
+// ---------- Inbox Search endpoints ----------
 
 export type InboxHitKind = 'issue' | 'pr';
 
@@ -417,15 +419,15 @@ const INBOX_SEARCH_MAX_Q = 6;
 
 function inboxSearchPrefix(createdSinceIso: string, viewer: string | null): string[] {
   const iso = createdSinceIso.replace(/\.\d{3}Z$/, 'Z');
-  // 不写 is:issue / is:pr:Search /issues 同时返回两者,用 pull_request 字段拆开,省一轮配额。
+  // Search /issues returns Issues and Pull requests together; split on pull_request to save a query.
   const parts = ['is:public', 'is:open', `created:>=${iso}`];
   if (viewer) parts.push(`-author:${viewer}`);
   return parts;
 }
 
 /**
- * 监视集里 created>=watermark 的公开 Issue 与新建 PR。
- * 优先 user:/org: 少打 Search,剩余 repo: OR 切批;每轮最多 6 次查询。
+ * Public Issues and Pull requests created at or after the watermark.
+ * Prefer user and organization qualifiers, then batch remaining repositories.
  */
 export async function searchInboxCreatedSince(
   repos: readonly string[],
@@ -497,13 +499,13 @@ export async function searchInboxCreatedSince(
   return { hits, queryTruncated: leftover.size > 0 };
 }
 
-/** 某仓 created>=since 的 workflow runs(Actions 无跨仓 Search,调用方限制仓数)。 */
+/** Workflow runs for one repository created at or after a timestamp. */
 export async function listRunsCreatedSince(ref: GhRef, sinceIso: string): Promise<GhRun[]> {
   const arr = await listRuns(ref);
   return arr.filter((r) => r.created_at >= sinceIso);
 }
 
-// ---------- 写(v0.1;破坏性动作由 UI 层二次确认后调用) ----------
+// ---------- Write endpoints ----------
 
 export async function createIssue(ref: GhRef, title: string, body: string): Promise<GhIssue> {
   return gh<GhIssue>(`/repos/${ghRefKey(ref)}/issues`, { method: 'POST', body: { title, body } });
@@ -541,7 +543,7 @@ export async function cancelRun(ref: GhRef, runId: number): Promise<void> {
   await gh(`/repos/${ghRefKey(ref)}/actions/runs/${runId}/cancel`, { method: 'POST' });
 }
 
-/** 当前鉴权身份(评论删除按钮的归属判断用;结果缓存)。 */
+/** Current authenticated identity, cached for comment ownership checks. */
 let viewerCache: string | null | undefined;
 export async function getViewerLogin(): Promise<string | null> {
   if (viewerCache !== undefined) return viewerCache;

@@ -1,29 +1,27 @@
 /**
- * 浏览器端入口:三形态挂载(官方原生栏优先 → better-sidebar 页签 → 独立右侧面板)。
+ * Browser entry point with three mount modes: the official native sidebar,
+ * a better-sidebar tab, and a standalone right panel.
  *
- * 说明:模块级 inject 声明 betterSidebar + slots(cordis 访问授权 +
- * 激活顺序保证);slots 是官方原生右侧栏座位注册的前提(web 平台核心
- * 服务,恒存在)。独立安装(无 better-sidebar)时该属性为 undefined,
- * mountWorkbench 据此自动降级为自绘右侧面板。卸载/HMR 经 ctx.effect
- * 级联清理。
+ * Module-level inject declares betterSidebar and slots for Cordis access and
+ * activation ordering. Slots provide the official native sidebar seat. When
+ * better-sidebar is absent, mountWorkbench falls back to the standalone panel.
+ * ctx.effect cleans up normal unload and HMR paths.
  */
 
 import type { ClientCtx } from './types.ts';
 import { mountWorkbench } from './mount.ts';
 
-/** Cordis 插件名,loader 诊断使用。 */
+/** Cordis plugin name used by loader diagnostics. */
 const name = 'github-workbench';
 
 /**
- * 必须显式声明注入:cordis Context 代理会拒绝未声明服务的属性访问
- * (实测错误:'cannot get property "betterSidebar" without inject')。
- * 声明后:better-sidebar 在 ⇒ 保证其先激活且可读;不在 ⇒ 属性为
- * undefined,mountWorkbench 自动走独立面板形态(官方 optional-peer 语义)。
- * slots ⇒ 官方原生右侧栏座位(sidebar.right.pane.tab)注册授权。
+ * Explicit injection is required because Cordis rejects undeclared service
+ * access. betterSidebar is optional; slots is the official native sidebar
+ * registration path.
  */
-const inject = ['slots'];
+const inject = ['slots', 'betterSidebar'];
 
-/** 客户端插件体。 */
+/** Client plugin body. */
 export function apply(ctx: ClientCtx): void {
   ctx.effect(() => mountWorkbench(ctx), 'github-workbench: dual-mode mount');
 }

@@ -1,6 +1,6 @@
 /**
- * 全站唯一图标集:16px octicon 风格、单色、继承 currentColor(视觉稿审定版)。
- * 禁止在组件里再手写文本字形图标;语义色圆点用 CSS(.gw-dot)而非图标。
+ * Shared 16px Octicon-style icon set using currentColor.
+ * Components must not add text glyph icons; semantic status dots use CSS.
  */
 
 import { createElement } from 'react';
@@ -13,7 +13,7 @@ export type IconName =
   | 'circle-idle' | 'external-link' | 'plus' | 'pencil' | 'trash' | 'comment'
   | 'merge' | 'lock' | 'file' | 'folder' | 'folder-open';
 
-/** 16 viewBox 单 path 注册表(fill 型为主;gear 自带描边子形)。 */
+/** Single-path icon registry in a 16px viewBox. */
 const PATHS: Record<IconName, string> = {
   octo: 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z',
   'chevron-down': 'M12.78 5.22a.749.749 0 00-1.06 0L8 9.44 4.28 5.72a.749.749 0 10-1.06 1.06l4.25 4.25c.146.147.338.22.53.22s.384-.072.53-.22l4.25-4.25a.749.749 0 000-1.06z',
@@ -44,14 +44,14 @@ const PATHS: Record<IconName, string> = {
 
 export interface GwIconProps {
   name: IconName;
-  /** 像素尺寸,缺省 15。 */
+  /** Pixel size; defaults to 15. */
   size?: number;
   className?: string;
   style?: CSSProperties;
   title?: string;
 }
 
-/** 统一图标组件:单 path、fill 继承 currentColor。 */
+/** Shared single-path icon component. */
 export function GwIcon(props: GwIconProps): React.ReactNode {
   const { name, size = 15, className = '', style, title } = props;
   return createElement('svg', {
@@ -67,7 +67,7 @@ export function GwIcon(props: GwIconProps): React.ReactNode {
           : createElement('path', { d: PATHS[name] }));
 }
 
-/** tab 注册用的图标工厂((size)=>ReactNode 形态)。 */
+/** Icon factory used for sidebar tab registration. */
 export function iconFor(name: IconName): (size: number) => React.ReactNode {
   return (size: number) => GwIcon({ name, size });
 }

@@ -1,12 +1,13 @@
 /**
- * 收件箱模块级 store:跨仓公开仓新建 Issue / PR,以及少量仓的新 Actions run。
- * 轮询不绑 Workbench visible(侧栏切走仍慢刷角标)。
- * 纯合并/切批可单测;fetch 经 deps 注入。
+ * Module-level inbox store for new Issues, Pull requests, and workflow runs
+ * across public repositories. Polling stays independent of Workbench
+ * visibility, and fetch access is injected for focused tests.
  */
 
 import { inboxItemKey, parseRepoInput, type InboxKind } from './lib.ts';
 import * as api from './api.ts';
 import * as cfg from './config.ts';
+import { t } from './locales.ts';
 import type { InboxSearchHit, RepoLite, GhRun } from './api.ts';
 
 export type { InboxKind };
@@ -87,7 +88,7 @@ export function runToItem(owner: string, repo: string, run: GhRun, unread: boole
     owner,
     repo,
     number: run.id,
-    title: run.display_title || run.name || `run #${run.id}`,
+    title: run.display_title || run.name || t('inbox.runNumber', { number: run.id }),
     htmlUrl: run.html_url,
     user: run.actor?.login ?? 'ghost',
     createdAt: run.created_at,
@@ -111,7 +112,7 @@ export function unreadByKind(items: readonly InboxItem[]): Record<InboxKind, num
   return out;
 }
 
-/** 合并新命中:已有 key 不改(保留已读);selfKeys 进箱但 unread=false。 */
+/** Merge new hits while preserving existing read state and self-created items. */
 export function mergeIncoming(
   prev: InboxItem[],
   incoming: InboxItem[],
@@ -149,7 +150,7 @@ function browserStorage(): InboxStorage {
       try { return localStorage.getItem(key); } catch { return null; }
     },
     setItem(key, value) {
-      try { localStorage.setItem(key, value); } catch { /* 隐私模式 */ }
+      try { localStorage.setItem(key, value); } catch { /* Ignore private-mode storage errors. */ }
     },
   };
 }
@@ -254,7 +255,7 @@ export function createInboxStore(deps: InboxDeps) {
       hasToken: Boolean(deps.getToken()),
     };
     for (const fn of listeners) {
-      try { fn(); } catch { /* 订阅者抛错不影响 store */ }
+      try { fn(); } catch { /* A subscriber error must not break the store. */ }
     }
   }
 
@@ -300,7 +301,7 @@ export function createInboxStore(deps: InboxDeps) {
       try {
         const runs = await deps.listRunsCreatedSince(ref, watermark);
         for (const run of runs) incoming.push(runToItem(ref.owner, ref.repo, run, true));
-      } catch { /* 私有仓 / 无 Actions 权限:跳过 */ }
+      } catch { /* Skip private repositories or missing Actions permissions. */ }
     }
     if (incoming.length === 0 && names.length === 0) {
       lastError = null;
@@ -312,7 +313,7 @@ export function createInboxStore(deps: InboxDeps) {
     const merged = mergeIncoming(items, incoming, readKeys, selfKeys);
     items = merged.items;
     const newest = incoming.reduce((acc, h) => (h.createdAt > acc ? h.createdAt : acc), watermark);
-    // 成功一轮后把水位推到「现在 - 30s」,避免时钟回拨漏单,同时不再反复拉整周
+    // Move the watermark to now minus 30 seconds after a successful poll.
     const floor = new Date(now() - 30_000).toISOString();
     watermark = newest > floor ? newest : floor;
     lastError = null;
@@ -321,7 +322,7 @@ export function createInboxStore(deps: InboxDeps) {
     const skipToast = firstTick;
     firstTick = false;
     if (!skipToast && merged.fresh.length) {
-      try { onFresh?.(merged.fresh); } catch { /* toast 失败不影响轮询 */ }
+      try { onFresh?.(merged.fresh); } catch { /* Toast failures must not stop polling. */ }
     }
     return skipToast ? [] : merged.fresh;
   }
@@ -423,7 +424,7 @@ export type InboxStore = ReturnType<typeof createInboxStore>;
 
 let singleton: InboxStore | null = null;
 
-/** 浏览器运行时单例。测试请用 createInboxStore。 */
+/** Browser runtime singleton; tests should use createInboxStore. */
 export function getInboxStore(factory?: () => InboxDeps): InboxStore {
   if (!singleton) singleton = createInboxStore((factory ?? liveInboxDeps)());
   return singleton;

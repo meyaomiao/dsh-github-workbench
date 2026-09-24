@@ -1,25 +1,21 @@
 /**
- * 全站样式:唯一颜色来源是宿主 --dsw-* 设计令牌(零硬编码色,自动跟随深浅主题);
- * 类名统一 gw-* 前缀隔离;构建为 TS 字符串模块由 ensureStyles() 注入一次
- * (与 better-sidebar 自身注入预设 CSS 的方式同源,规避 esbuild 的 CSS Modules 插件链)。
+ * Shared styles use host --dsw-* design tokens for colors and the gw-* prefix
+ * for isolation. The stylesheet is injected once by ensureStyles().
  *
- * 挂载填充契约:根节点 .gw-root 用常规流式(width/height 100% + relative),
- * **绝不用 absolute inset 0**——宿主 TabContent 不一定是定位元素,绝对定位会
- * 逃逸到 [data-dsh-panel-host] 固定层盖住整个侧边栏框架(实测事故),同时让
- * 容器查询误读视口宽度导致自适应失效。独立面板形态同样以流式撑满壳内。
+ * The root uses normal flow layout rather than absolute inset positioning so
+ * it fills the host tab and keeps container queries accurate.
  */
 
 export const GW_CSS = `
 .gw-root{position:relative;width:100%;height:100%;min-height:0;display:flex;flex-direction:column;min-width:280px;
-  /* 透明根:官方面板/better-sidebar 页签/独立面板各自提供底色,
-     组件不再自刷背景(避免遮住宿主 0.1.5 新调色板)。 */
+  /* Transparent root: the host surfaces provide their own background. */
   background:transparent;color:var(--dsw-alias-label-primary);
   font-size:var(--gw-body-size, 12px);line-height:1.5;
   container-type:inline-size}
 .gw-root *,.gw-root *::before,.gw-root *::after{box-sizing:border-box}
 .gw-icon{display:block;flex:none}
 
-/* ---------- 头部 ---------- */
+/* ---------- Header ---------- */
 .gw-header{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--dsw-alias-border-l2);position:relative}
 .gw-repo-btn{appearance:none;background:none;border:none;color:inherit;font:inherit;font-weight:600;
   display:flex;align-items:center;gap:5px;cursor:pointer;padding:3px 6px;border-radius:6px;min-width:0}
@@ -43,7 +39,7 @@ export const GW_CSS = `
   background:var(--dsw-alias-state-danger-primary);color:var(--dsw-alias-bg-layer-1);font-weight:600}
 .gw-hbtn.has-unread{color:var(--dsw-alias-state-danger-primary)}
 
-/* ---------- 弹层(仓库切换 / 设置)---------- */
+/* ---------- Popovers ---------- */
 .gw-pop{position:absolute;top:calc(100% + 4px);z-index:40;width:min(320px,calc(100vw - 24px));
   background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:10px;
   box-shadow:0 10px 32px rgba(0,0,0,.35);padding:8px}
@@ -70,7 +66,7 @@ export const GW_CSS = `
 .gw-field{display:flex;flex-direction:column;gap:3px;padding:4px 2px}
 .gw-field>label{font-size:10px;color:var(--dsw-alias-label-secondary)}
 
-/* ---------- 子页签 ---------- */
+/* ---------- Tabs ---------- */
 .gw-tabs{display:flex;border-bottom:1px solid var(--dsw-alias-border-l2);padding:0 8px;overflow-x:auto}
 .gw-tab{appearance:none;background:none;border:none;color:var(--dsw-alias-label-secondary);cursor:pointer;
   font-size:11px;font-family:inherit;padding:8px 10px;border-bottom:2px solid transparent;
@@ -79,7 +75,7 @@ export const GW_CSS = `
 .gw-tab.on{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-accent-primary)}
 .gw-count{background:var(--dsw-alias-interactive-bg-active);border-radius:999px;padding:0 6px;font-size:10px;line-height:16px}
 
-/* ---------- 主体 / 页脚 ---------- */
+/* ---------- Main area and footer ---------- */
 .gw-body{flex:1;min-height:0;position:relative;display:flex}
 .gw-inbox{position:absolute;inset:0;z-index:28;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;min-height:0}
 .gw-inbox .gw-list{flex:1}
@@ -93,7 +89,7 @@ export const GW_CSS = `
 .gw-footer{display:flex;justify-content:space-between;gap:12px;padding:5px 12px;
   border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-tertiary);font-size:10px}
 
-/* ---------- 按钮 ---------- */
+/* ---------- Buttons ---------- */
 .gw-btn{appearance:none;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--dsw-alias-border-l1);
   background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border-radius:6px;
   padding:3px 10px;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap}
@@ -106,7 +102,7 @@ export const GW_CSS = `
 .gw-link{color:var(--dsw-alias-accent-primary);text-decoration:none}
 .gw-link:hover{text-decoration:underline}
 
-/* ---------- 列表(Code 外三页签共用)---------- */
+/* ---------- Shared list views ---------- */
 .gw-colpane{flex-direction:column}
 .gw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;
   border-bottom:1px solid var(--dsw-alias-border-l2);flex:none;flex-wrap:wrap}
@@ -132,7 +128,7 @@ export const GW_CSS = `
 .gw-hoverbar{display:none;gap:6px;margin-top:6px;flex-wrap:wrap}
 .gw-row:hover .gw-hoverbar{display:flex}
 
-/* ---------- Code 双栏 ---------- */
+/* ---------- Code split view ---------- */
 .gw-codepane{flex:1;min-height:0;display:flex}
 .gw-tree{width:190px;flex:none;border-right:1px solid var(--dsw-alias-border-l2);overflow:auto;padding:6px 4px}
 .gw-tree-item{display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;cursor:pointer;
@@ -153,7 +149,7 @@ export const GW_CSS = `
 .gw-ln:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .gw-no{width:38px;flex:none;text-align:right;padding-right:10px;color:var(--dsw-alias-label-tertiary);user-select:none}
 
-/* ---------- 详情抽屉 ---------- */
+/* ---------- Detail drawer ---------- */
 .gw-detail{position:absolute;inset:0;z-index:30;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column}
 .gw-detail-head{padding:10px 14px;border-bottom:1px solid var(--dsw-alias-border-l2);flex:none}
 .gw-detail-body{flex:1;min-height:0;overflow:auto;padding:12px 14px;color:var(--dsw-alias-label-secondary);
@@ -164,7 +160,7 @@ export const GW_CSS = `
 .gw-textarea{resize:vertical;min-height:52px;max-height:200px;font-family:inherit}
 .gw-composer-row{display:flex;gap:8px;align-items:center}
 
-/* ---------- 反馈:确认气泡 / toast / 空 / 错误 / 加载 ---------- */
+/* ---------- Feedback and loading states ---------- */
 .gw-scrim{position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}
 .gw-dialog{width:min(360px,100%);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);
   border-radius:12px;padding:14px;box-shadow:0 16px 44px rgba(0,0,0,.45)}
@@ -177,23 +173,23 @@ export const GW_CSS = `
 .gw-toast.err{border-color:var(--dsw-alias-state-danger-primary);color:var(--dsw-alias-state-danger-primary)}
 .gw-toast.ok{border-color:var(--dsw-alias-state-success-primary)}
 .gw-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-tertiary);
-  padding:28px;text-align:center;line-height:1.8}
+  padding:28px;text-align:center;line-height:1.8;white-space:pre-line}
 .gw-errbox{margin:12px;padding:10px 12px;border:1px solid var(--dsw-alias-state-danger-primary);
   border-radius:8px;color:var(--dsw-alias-state-danger-primary);font-size:12px;line-height:1.6;white-space:pre-wrap}
 .gw-spin{animation:gw-spin 1s linear infinite}
 @keyframes gw-spin{to{transform:rotate(360deg)}}
 .gw-muted{color:var(--dsw-alias-label-tertiary)}
 
-/* ---------- 窄屏紧凑档(<600px):树变覆盖抽屉、头部换行 ---------- */
+/* ---------- Narrow layout (<600px) ---------- */
 .gw-codepane{position:relative}
-/* 抽屉开关(CodeView 层悬浮,宽屏隐藏);treeOpen 时变为关闭钮 */
+/* The drawer toggle is floating in CodeView and hidden on wide screens. */
 .gw-tree-fab{display:none;position:absolute;top:8px;left:8px;z-index:26}
 @container (max-width:599px){
   .gw-header{flex-wrap:wrap;row-gap:6px;padding-right:10px}
   .gw-select{margin-left:0;max-width:104px}
   .gw-tabs{padding:0 4px}
   .gw-tab{padding:8px 9px}
-  .gw-codepane.tree-open .gw-tree-fab{left:auto;right:8px} /* 抽屉开着 ⇒ 变成右上角关闭位 */
+  .gw-codepane.tree-open .gw-tree-fab{left:auto;right:8px} /* Open drawer becomes a close control. */
   .gw-tree-fab{display:inline-flex}
   .gw-codepane:not(.tree-open) .gw-tree{display:none;width:auto;position:absolute;inset:0;z-index:25;
     background:var(--dsw-alias-bg-layer-1);border-right:none}
@@ -203,7 +199,7 @@ export const GW_CSS = `
   .gw-crumb{flex-wrap:wrap}
 }
 
-/* ---------- 容器查询三档(<720 默认紧凑 / ≥720 / ≥1000)---------- */
+/* ---------- Container breakpoints (<720, >=720, >=1000) ---------- */
 @container (min-width:720px){
   .gw-tree{width:240px}
   .gw-header,.gw-toolbar{padding-left:16px;padding-right:16px}
@@ -223,7 +219,7 @@ export const GW_CSS = `
 
 let injected = false;
 
-/** 幂等注入全局样式(幂等:HMR/重复挂载安全)。 */
+/** Idempotently inject the global stylesheet for HMR and remount safety. */
 export function ensureStyles(): void {
   if (injected && typeof document !== 'undefined' && document.getElementById('github-workbench-styles')) return;
   if (typeof document === 'undefined') return;

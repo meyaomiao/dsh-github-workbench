@@ -1,6 +1,7 @@
 /**
- * 运行态配置存储:localStorage 单一事实源(repo/branch/token 等,双形态共享);
- * tab 形态下宿主 pluginToggles 里的 token 作为兜底回退(better-sidebar 原生齿轮设置)。
+ * Runtime configuration backed by localStorage as the single source of truth
+ * for repository, branch, token, and related settings shared by both mounts.
+ * Host plugin toggles provide a fallback token for the sidebar tab mode.
  */
 
 import type { ClientCtx, SidebarRegistry } from './types.ts';
@@ -23,7 +24,7 @@ function lsSet(key: string, value: string): void {
   try {
     if (value) localStorage.setItem(key, value);
     else localStorage.removeItem(key);
-  } catch { /* 隐私模式忽略 */ }
+  } catch { /* Ignore private-mode storage errors. */ }
 }
 
 export function loadToken(): string { return lsGet(K.token); }
@@ -75,7 +76,7 @@ export function loadRecentRepos(): string[] {
 }
 export function pushRecentRepo(fullName: string): string[] {
   const next = [fullName, ...loadRecentRepos().filter((r) => r !== fullName)].slice(0, 5);
-  try { lsSet(K.recent, JSON.stringify(next)); } catch { /* 忽略 */ }
+  try { lsSet(K.recent, JSON.stringify(next)); } catch { /* Ignore storage errors. */ }
   return next;
 }
 
@@ -92,8 +93,8 @@ export function loadPanelWidth(): number {
 export function savePanelWidth(w: number): void { lsSet(K.panelWidth, String(clamp(Math.round(w), 320, 720))); }
 
 /**
- * tab 形态下,宿主 pluginToggles 里保存的 token 兜底:
- * 本地无 token 而宿主有 → 回填本地(一次性合并,之后以本地为准)。
+ * In tab mode, use the host pluginToggles token as a fallback.
+ * If the host has a token and local storage does not, copy it once.
  */
 export function absorbHostToken(ctx: ClientCtx): void {
   let svc: SidebarRegistry & {
@@ -106,10 +107,10 @@ export function absorbHostToken(ctx: ClientCtx): void {
     if (hostToken && !loadToken()) saveToken(hostToken);
     const hostAuto = typeof blob?.autoRefreshSec === 'number' ? blob.autoRefreshSec : -1;
     if (hostAuto >= 0 && !lsGet(K.autoSec)) saveAutoRefreshSec(hostAuto);
-  } catch { /* 服务不可用时静默 */ }
+  } catch { /* Silently ignore unavailable host services. */ }
 }
 
-/** 从会话工作区自动识别仓库:读 .git/config 解析 GitHub origin。 */
+/** Detect a repository from the session workspace's .git/config. */
 export async function detectWorkspaceRepo(sessionId: string): Promise<GhRef | null> {
   for (const path of ['.git/config', '../.git/config']) {
     try {
@@ -125,9 +126,9 @@ export async function detectWorkspaceRepo(sessionId: string): Promise<GhRef | nu
       if (!text) continue;
       const ref = parseGithubRemote(text);
       if (ref) return ref;
-    } catch { /* 下一个候选路径 */ }
+    } catch { /* Try the next candidate path. */ }
   }
-  // 最后兜底:会话 cwd 字符串里若带 owner/repo 形态的 GitHub 目录名
+  // Final fallback for GitHub directory names embedded in the session cwd.
   return null;
 }
 
